@@ -265,7 +265,7 @@ class IQ_Option:
             except:
                 pass
 
-    def get_all_init_v2(self):
+    '''def get_all_init_v2(self):
         self.api.api_option_init_all_result_v2 = None
 
         if self.check_connect() == False:
@@ -277,7 +277,30 @@ class IQ_Option:
             if time.time() - start_t >= 30:
                 logging.error('**warning** get_all_init_v2 late 30 sec')
                 return None
-        return self.api.api_option_init_all_result_v2
+        return self.api.api_option_init_all_result_v2'''
+        
+    def get_all_init_v2(self):
+        attempts = 1000
+    
+        while attempts > 0:
+            if not self.check_connect():
+                self.connect()
+        
+            self.api.api_option_init_all_result_v2 = None
+            self.api.get_api_option_init_all_v2()
+            start_t = time.time()
+        
+            while self.api.api_option_init_all_result_v2 is None:
+                if time.time() - start_t >= 5:
+                    attempts -= 1
+                    if attempts == 0:
+                        raise Exception("Falha ao conectar após várias tentativas")
+                
+                    self.connect()
+                    self.api.get_api_option_init_all_v2()
+                    start_t = time.time()
+
+            return self.api.api_option_init_all_result_v2        
 
         # return OP_code.ACTIVES
 
@@ -950,7 +973,7 @@ class IQ_Option:
         start_t = time.time()
     
         while self.api.underlying_list_data is None:
-            if time.time() - start_t >= 30:
+            if time.time() - start_t >= 5:
                 # Remova ou comente a linha abaixo para eliminar o aviso
                 # logging.error('**warning** get_digital_underlying_list_data late 30 sec, retrying connection...')
                 self.connect()  # tenta reconectar
