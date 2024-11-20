@@ -82,75 +82,47 @@ class IQ_Option:
         try:
             self.api.close()
         except:
+            logging.error("Aviso: Falha ao fechar a sessão existente")
             pass
-            # logging.error('**warning** self.api.close() fail')
 
-        self.api = IQOptionAPI(
-            "iqoption.com", self.email, self.password)
+        # Inicializar a conexão com a API
+        self.api = IQOptionAPI("iqoption.com", self.email, self.password)
         check = None
 
-        # 2FA--
+        # Se houver autenticação em 2 fatores (2FA)
         if sms_code is not None:
             self.api.setTokenSMS(self.resp_sms)
             status, reason = self.api.connect2fa(sms_code)
             if not status:
                 return status, reason
-        # 2FA--
 
-        self.api.set_session(headers=self.SESSION_HEADER,
-                             cookies=self.SESSION_COOKIE)
-
+        # Configurar sessão com cabeçalhos e cookies
+        self.api.set_session(headers=self.SESSION_HEADER, cookies=self.SESSION_COOKIE)
         check, reason = self.api.connect()
 
-        if check == True:
-            # -------------reconnect subscribe_candle
-            self.re_subscribe_stream()
-
-            # ---------for async get name: "position-changed", microserviceName
-            while global_value.balance_id == None:
+        # Verifica se a conexão foi bem-sucedida
+        if check and self.api:
+            self.re_subscribe_stream()  # Reconecta aos streams
+            while global_value.balance_id is None:
                 pass
-
-            self.position_change_all(
-                "subscribeMessage", global_value.balance_id)
-
+            self.position_change_all("subscribeMessage", global_value.balance_id)
             self.order_changed_all("subscribeMessage")
             self.api.setOptions(1, True)
-
-            """
-            self.api.subscribe_position_changed(
-                "position-changed", "multi-option", 2)
-
-            self.api.subscribe_position_changed(
-                "trading-fx-option.position-changed", "fx-option", 3)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "crypto", 4)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "forex", 5)
-
-            self.api.subscribe_position_changed(
-                "digital-options.position-changed", "digital-option", 6)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "cfd", 7)
-            """
-
-            # self.get_balance_id()
             return True, None
         else:
-            if json.loads(reason)['code'] == 'verify':
-                response = self.api.send_sms_code(json.loads(reason)['token'])
-
-                if response.json()['code'] != 'success':
-                    return False, response.json()['message']
-
-                # token_sms
-                self.resp_sms = response
-                return False, "2FA"
+            # Tratamento de erro JSON para `reason`
+            try:
+                reason_data = json.loads(reason)
+                if reason_data.get('code') == 'verify':
+                    response = self.api.send_sms_code(reason_data['token'])
+                    if response.json().get('code') != 'success':
+                        return False, response.json().get('message')
+                    self.resp_sms = response
+                    return False, "2FA"
+            except json.JSONDecodeError:
+                logging.error("Erro ao decodificar JSON: resposta 'reason' está vazia ou inválida")
+                return False, reason
             return False, reason
-
-    # self.update_ACTIVES_OPCODE()
 
     def connect_2fa(self, sms_code):
         return self.connect(sms_code=sms_code)
@@ -205,17 +177,16 @@ class IQ_Option:
         return self.api.leaderboard_deals_client
 
     def get_instruments(self, type):
-        # type="crypto"/"forex"/"cfd"
         time.sleep(self.suspend)
         self.api.instruments = None
-        while self.api.instruments == None:
+        while self.api.instruments is None:
             try:
                 self.api.get_instruments(type)
                 start = time.time()
-                while self.api.instruments == None and time.time() - start < 10:
+                while self.api.instruments is None and time.time() - start < 10:
                     pass
-            except:
-                logging.error('**error** api.get_instruments need reconnect')
+            except Exception as e:
+                logging.error("Erro na API ao obter instrumentos, tentativa de reconexão: %s", e)
                 self.connect()
         return self.api.instruments
 
@@ -952,15 +923,10 @@ class IQ_Option:
         self.api.underlying_list_data = None
         self.api.get_digital_underlying()
         start_t = time.time()
-    
         while self.api.underlying_list_data is None:
-            if time.time() - start_t >= 5:
-                # Remova ou comente a linha abaixo para eliminar o aviso
-                # logging.error('**warning** get_digital_underlying_list_data late 30 sec, retrying connection...')
-                self.connect()  # tenta reconectar
-                self.api.get_digital_underlying()  # reenvia a requisição
-                start_t = time.time()  # reinicia o contador de tempo
-    
+            if time.time() - start_t >= 30:
+                logging.error("Atraso ao obter dados de ativos digitais (30 segundos)")
+                return None
         return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
