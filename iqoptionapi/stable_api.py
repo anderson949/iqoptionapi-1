@@ -950,9 +950,7 @@ class IQ_Option:
         start_t = time.time()
         while self.api.underlying_list_data == None:
             if time.time() - start_t >= 30:
-                logging.error(
-                    '**warning** get_digital_underlying_list_data late 30 sec')
-                return None
+                return 
 
         return self.api.underlying_list_data
 
