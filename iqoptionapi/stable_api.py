@@ -279,12 +279,12 @@ class IQ_Option:
                             self.OPEN_TIME[option][name]["open"] = active["enabled"]    
 
     def __get_digital_open(self):
-        # Obtém os dados digitais
+        # Obtém os dados digitais com múltiplas tentativas
         digital_data = self.get_digital_underlying_list_data()
 
         # Verifica se os dados são válidos antes de acessar "underlying"
         if not digital_data or "underlying" not in digital_data:
-            logging.error("Falha ao obter dados digitais ou dados incompletos")
+            logging.error(f"Falha ao obter dados digitais ou dados incompletos. HORÁRIO ATUAL: {time.strftime('%H:%M:%S')}")
             return  # Sai da função se os dados estiverem incompletos
 
         for digital in digital_data["underlying"]:
@@ -927,16 +927,32 @@ class IQ_Option:
         return self.api.sold_digital_options_respond
 # __________________for Digital___________________
 
-    def get_digital_underlying_list_data(self):
-        self.api.underlying_list_data = None
-        self.api.get_digital_underlying()
-        start_t = time.time()
-        while self.api.underlying_list_data == None:
-            if time.time() - start_t >= 30:
-                logging.error(
-                    '**warning** get_digital_underlying_list_data late 30 sec')
-                return None
+    def get_digital_underlying_list_data(self, max_attempts=3, timeout=30):
+        attempt = 0
+        while attempt < max_attempts:
+            self.api.underlying_list_data = None
+            self.api.get_digital_underlying()
+            start_t = time.time()
+        
+            # Aguardar até receber os dados ou o tempo limite expirar
+            while self.api.underlying_list_data is None:
+                if time.time() - start_t >= timeout:
+                    logging.warning(
+                        f"Tentativa {attempt + 1}/{max_attempts}: Tempo limite de {timeout} segundos ao tentar obter dados digitais."
+                    )
+                    break
+            # Se os dados foram recebidos, retorná-los
+            if self.api.underlying_list_data is not None:
+                return self.api.underlying_list_data
+        
+            # Incrementa a tentativa
+            attempt += 1
+            logging.info("Tentando obter dados digitais novamente...")
 
+        # Log de falha após todas as tentativas
+        logging.error("Falha ao obter dados digitais após múltiplas tentativas.")
+        return {}  # Retorna dicionário vazio se não conseguir os dados
+    
     def get_strike_list(self, ACTIVES, duration):
         self.api.strike_list = None
         self.api.get_strike_list(ACTIVES, duration)
@@ -1589,4 +1605,4 @@ class IQ_Option:
             return True, digital_order_id
         else:
             return False, digital_order_id
-    
+        
