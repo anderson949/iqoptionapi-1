@@ -925,11 +925,11 @@ class IQ_Option:
         self.api.underlying_list_data = None
         self.api.get_digital_underlying()
         start_t = time.time()
-        while self.api.underlying_list_data is None:
+        while self.api.underlying_list_data == None:
             if time.time() - start_t >= 30:
-                logging.error("Atraso ao obter dados de ativos digitais (30 segundos)")
+                logging.error(
+                    '**warning** get_digital_underlying_list_data late 30 sec')
                 return None
-        return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
         self.api.strike_list = None
