@@ -79,11 +79,12 @@ class IQ_Option:
         self.SESSION_COOKIE = cookie
 
     def connect(self, sms_code=None):
-        try:
-            self.api.close()
-        except:
-            logging.error("Aviso: Falha ao fechar a sessão existente")
-            pass
+        # Verifique se self.api existe antes de tentar fechar a sessão
+        if hasattr(self, 'api') and self.api is not None:
+            try:
+                self.api.close()
+            except Exception as e:
+                logging.error("Aviso: Falha ao fechar a sessão existente - %s", e)
 
         # Inicializar a conexão com a API
         self.api = IQOptionAPI("iqoption.com", self.email, self.password)
@@ -177,16 +178,17 @@ class IQ_Option:
         return self.api.leaderboard_deals_client
 
     def get_instruments(self, type):
+        # type="crypto"/"forex"/"cfd"
         time.sleep(self.suspend)
         self.api.instruments = None
-        while self.api.instruments is None:
+        while self.api.instruments == None:
             try:
                 self.api.get_instruments(type)
                 start = time.time()
-                while self.api.instruments is None and time.time() - start < 10:
+                while self.api.instruments == None and time.time() - start < 10:
                     pass
-            except Exception as e:
-                logging.error("Erro na API ao obter instrumentos, tentativa de reconexão: %s", e)
+            except:
+                logging.error('**error** api.get_instruments need reconnect')
                 self.connect()
         return self.api.instruments
 
