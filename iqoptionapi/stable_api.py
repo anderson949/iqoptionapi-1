@@ -279,9 +279,15 @@ class IQ_Option:
                             self.OPEN_TIME[option][name]["open"] = active["enabled"]    
 
     def __get_digital_open(self):
-        # for digital options
-        digital_data = self.get_digital_underlying_list_data()["underlying"]
-        for digital in digital_data:
+        # Obtém os dados digitais
+        digital_data = self.get_digital_underlying_list_data()
+
+        # Verifica se os dados são válidos antes de acessar "underlying"
+        if not digital_data or "underlying" not in digital_data:
+            logging.error("Falha ao obter dados digitais ou dados incompletos")
+            return  # Sai da função se os dados estiverem incompletos
+
+        for digital in digital_data["underlying"]:
             name = digital["underlying"]
             schedule = digital["schedule"]
             self.OPEN_TIME["digital"][name]["open"] = False
