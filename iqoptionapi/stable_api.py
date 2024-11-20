@@ -944,7 +944,7 @@ class IQ_Option:
         return self.api.sold_digital_options_respond
 # __________________for Digital___________________
 
-    def get_digital_underlying_list_data(self):
+    '''def get_digital_underlying_list_data(self):
         self.api.underlying_list_data = None
         self.api.get_digital_underlying()
         start_t = time.time()
@@ -957,6 +957,26 @@ class IQ_Option:
                 self.api.get_digital_underlying()  # reenvia a requisição
                 start_t = time.time()  # reinicia o contador de tempo
     
+        return self.api.underlying_list_data'''
+
+    def get_digital_underlying_list_data(self):
+        # Verifica se os dados já estão disponíveis e os retorna
+        if self.api.underlying_list_data:
+            return self.api.underlying_list_data
+
+        # Realiza a conexão e a requisição inicial
+        self.api.underlying_list_data = None
+        self.api.get_digital_underlying()
+        start_t = time.time()
+
+        # Tenta buscar os dados com um timeout ajustado para uma nova tentativa a cada 5 segundos
+        while self.api.underlying_list_data is None:
+            if time.time() - start_t >= 5:  # Reduzindo o tempo para tentar novamente
+                # Reenvia a solicitação sem log
+                self.connect()
+                self.api.get_digital_underlying()
+                start_t = time.time()  # Reinicia o contador de tempo
+
         return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
@@ -1611,3 +1631,4 @@ class IQ_Option:
             return True, digital_order_id
         else:
             return False, digital_order_id
+    
