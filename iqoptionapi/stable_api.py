@@ -948,12 +948,15 @@ class IQ_Option:
         self.api.underlying_list_data = None
         self.api.get_digital_underlying()
         start_t = time.time()
-        while self.api.underlying_list_data == None:
+    
+        while self.api.underlying_list_data is None:
             if time.time() - start_t >= 30:
-                logging.error(
-                    '**warning** get_digital_underlying_list_data late 30 sec')
-                return None
-
+                # Remova ou comente a linha abaixo para eliminar o aviso
+                # logging.error('**warning** get_digital_underlying_list_data late 30 sec, retrying connection...')
+                self.connect()  # tenta reconectar
+                self.api.get_digital_underlying()  # reenvia a requisição
+                start_t = time.time()  # reinicia o contador de tempo
+    
         return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
