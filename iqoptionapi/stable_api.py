@@ -265,7 +265,7 @@ class IQ_Option:
             except:
                 pass
 
-    def get_all_init_v2(self):
+    '''def get_all_init_v2(self):
         self.api.api_option_init_all_result_v2 = None
 
         if self.check_connect() == False:
@@ -277,7 +277,48 @@ class IQ_Option:
             if time.time() - start_t >= 5:
                 logging.error('**warning** get_all_init_v2 late 30 sec')
                 return None
-        return self.api.api_option_init_all_result_v2
+        return self.api.api_option_init_all_result_v2'''
+
+    def get_all_init_v2(self):
+        max_attempts = 5  # Limite de tentativas
+        attempt = 0
+    
+        while attempt < max_attempts:
+            try:
+                # Verifica a conexão do WebSocket
+                if not self.check_connect():
+                    self.connect()
+
+                # Reinicializa a variável e realiza a chamada
+                self.api.api_option_init_all_result_v2 = None
+                self.api.get_api_option_init_all_v2()
+                start_t = time.time()
+            
+                # Espera pelo resultado com timeout reduzido
+                while self.api.api_option_init_all_result_v2 is None:
+                    if time.time() - start_t >= 5:
+                        attempt += 1
+                        if attempt >= max_attempts:
+                            return None  # Retorna None após várias tentativas
+
+                        # Reconecta e refaz a chamada se o tempo limite foi excedido
+                        self.connect()
+                        self.api.get_api_option_init_all_v2()
+                        start_t = time.time()  # Reinicia o timer
+
+                return self.api.api_option_init_all_result_v2  # Dados obtidos com sucesso
+        
+            except AttributeError:
+                # Reconecta o WebSocket caso `connected` não esteja disponível
+                self.api = IQOptionAPI("iqoption.com", self.email, self.password)  # Reinicializa a API
+                self.connect()
+        
+            except Exception:
+                attempt += 1
+                time.sleep(5)  # Pausa antes de tentar novamente
+
+        # Se todas as tentativas falharem, retorna None
+        return None
 
         # return OP_code.ACTIVES
 
