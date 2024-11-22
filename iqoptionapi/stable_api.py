@@ -194,8 +194,6 @@ class IQ_Option:
             # Escrevendo o arquivo constants.py
             with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
                 arquivo.write("\n".join(conteudo))
-            
-            print(f"Arquivo {caminho_arquivo} atualizado com sucesso!")
 
         except Exception as e:
             print(f"Erro ao atualizar ativos: {e}")
