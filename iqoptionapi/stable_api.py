@@ -170,14 +170,43 @@ class IQ_Option:
         return OP_code.ACTIVES
 
     def update_ACTIVES_OPCODE(self):
-        # update from binary option
-        self.get_ALL_Binary_ACTIVES_OPCODE()
-        # crypto /dorex/cfd
-        self.instruments_input_all_in_ACTIVES()
-        dicc = {}
-        for lis in sorted(OP_code.ACTIVES.items(), key=operator.itemgetter(1)):
-            dicc[lis[0]] = lis[1]
-        OP_code.ACTIVES = dicc
+        """
+        Atualiza o dicionário OP_code.ACTIVES com dados de todas as categorias de ativos.
+        Organiza os ativos por ID e formata os nomes.
+        """
+        try:
+            # Atualizando ativos de opções binárias
+            self.get_ALL_Binary_ACTIVES_OPCODE()
+
+            # Atualizando ativos de outras categorias (crypto, forex, cfd)
+            self.instruments_input_all_in_ACTIVES()
+
+            # Dicionário temporário para organizar os ativos
+            ativos_atualizados = {}
+
+            # Ordenando e formatando os ativos
+            for ativo_id, ativo_nome in sorted(OP_code.ACTIVES.items(), key=operator.itemgetter(1)):
+                ativo_nome = ativo_nome.replace('front.', '').strip()  # Remover prefixo 'front.'
+                ativos_atualizados[ativo_nome] = ativo_id
+
+            # Atualizando o dicionário global OP_code.ACTIVES
+            OP_code.ACTIVES = ativos_atualizados
+
+            # Gerando saída formatada
+            print("'''")
+            print('Módulo para constantes da API da IQ Option.')
+            print('Atualizado por @stealthlord_anonymous')
+            print("'''")
+            print('ACTIVES = {')
+
+            for i, (nome, ativo_id) in enumerate(ativos_atualizados.items()):
+                separador = ',' if i < len(ativos_atualizados) - 1 else ''
+                print(f'    "{nome}": {ativo_id}{separador}')
+        
+            print('}')
+
+        except Exception as e:
+            print(f"Erro ao atualizar ativos: {e}")
 
     def get_name_by_activeId(self, activeId):
         info = self.get_financial_information(activeId)
