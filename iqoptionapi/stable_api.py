@@ -319,16 +319,24 @@ class IQ_Option:
 
     def get_all_init_v2(self):
         self.api.api_option_init_all_result_v2 = None
+        logging.info("Iniciando get_all_init_v2.")
 
-        if self.check_connect() == False:
+        if not self.check_connect():
+            logging.warning("Conexão perdida. Reconectando...")
             self.connect()
 
+        logging.info("Chamando get_api_option_init_all_v2.")
         self.api.get_api_option_init_all_v2()
+
         start_t = time.time()
-        while self.api.api_option_init_all_result_v2 == None:
+        while self.api.api_option_init_all_result_v2 is None:
             if time.time() - start_t >= 30:
                 logging.error('**warning** get_all_init_v2 late 30 sec')
                 return None
+            logging.debug("Aguardando atualização de api_option_init_all_result_v2...")
+            time.sleep(0.5)
+
+        logging.info("get_all_init_v2 concluído com sucesso.")
         return self.api.api_option_init_all_result_v2
 
         # return OP_code.ACTIVES
