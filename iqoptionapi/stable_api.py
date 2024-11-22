@@ -45,7 +45,7 @@ class IQ_Option:
             "User-Agent": r"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36"}
         self.SESSION_COOKIE = {}
         self.connect()
-        #self.api = None
+        self.api = None
 
         # Caminho para o arquivo constants.py
         self.constants_path = "iqoptionapi/constants.py"
@@ -89,33 +89,45 @@ class IQ_Option:
     def connect(self, sms_code=None):
         try:
             if self.api:
-                self.api.close()  # Fecha qualquer conexão existente
+                self.api.close()  # Fecha a conexão existente
         except:
-            logging.warning('Erro ao fechar conexão anterior.')
+            logging.warning("Nenhuma conexão anterior para fechar.")
 
+        # Inicializa a API
         self.api = IQOptionAPI("iqoption.com", self.email, self.password)
 
+        # Configuração para autenticação 2FA, se necessário
         if sms_code:
             self.api.setTokenSMS(sms_code)
             status, reason = self.api.connect2fa(sms_code)
             if not status:
-                raise Exception(f"Falha na conexão 2FA: {reason}")
+                logging.error(f"Falha na conexão 2FA: {reason}")
+                return False, reason
 
+        # Conecta à API
         status, reason = self.api.connect()
 
         if not status:
-            raise Exception(f"Erro ao conectar na API: {reason}")
+            logging.error(f"Erro ao conectar na API: {reason}")
+            self.api = None  # Garante que `self.api` seja `None` em caso de falha
+            return status, reason
 
-        logging.info("Conexão bem-sucedida.")
-        return True
+        logging.info("Conexão com a API bem-sucedida.")
+        return status, reason
 
     def connect_2fa(self, sms_code):
         return self.connect(sms_code=sms_code)
 
     def check_connect(self):
-        if not self.api or not global_value.check_websocket_if_connect:
-            self.connect()  # Reconecta automaticamente
+        if not self.api:
+            logging.error("API não inicializada.")
             return False
+
+        if not global_value.check_websocket_if_connect:
+            logging.warning("WebSocket desconectado. Tentando reconectar...")
+            self.connect()
+            return False
+
         return True
 
     # _________________________UPDATE ACTIVES OPCODE_____________________
