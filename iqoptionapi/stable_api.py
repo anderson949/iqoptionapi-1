@@ -44,20 +44,16 @@ class IQ_Option:
         self.SESSION_HEADER = {
             "User-Agent": r"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36"}
         self.SESSION_COOKIE = {}
-        self.connect()
         self.api = None
+        self.connect()
+        # Atualiza constants.py ao iniciar a classe
+        self.update_ACTIVES_OPCODE()  # Agora funciona porque self.api está inicializado
 
         # Caminho para o arquivo constants.py
-        self.constants_path = "iqoptionapi/constants.py"
+        self.constants_path = "constants.py"
 
         # Atualiza constants.py ao iniciar a classe
         self.update_ACTIVES_OPCODE()
-
-        # --start
-        # self.connect()
-        # this auto function delay too long
-
-    # --------------------------------------------------------------------------
 
     def get_server_timestamp(self):
         return self.api.timesync.server_timestamp
