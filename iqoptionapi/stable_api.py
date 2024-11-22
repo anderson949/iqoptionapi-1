@@ -291,29 +291,43 @@ class IQ_Option:
                 pass
 
     def get_all_init_v2(self):
+        # Verifica se a API está inicializada
         if not self.api:
             raise Exception("API não inicializada. Certifique-se de que a conexão foi configurada com sucesso.")
-
+    
+        # Reseta o resultado para evitar dados antigos
         self.api.api_option_init_all_result_v2 = None
         logging.info("Iniciando get_all_init_v2.")
-
+    
+        # Verifica a conexão e reconecta, se necessário
         if not self.check_connect():
-            logging.warning("Conexão perdida. Reconectando...")
-            self.connect()
-
-        logging.info("Chamando get_api_option_init_all_v2.")
-        self.api.get_api_option_init_all_v2()
-
+            logging.warning("Conexão perdida. Tentando reconectar...")
+            status, reason = self.connect()
+            if not status:
+                raise Exception(f"Falha ao reconectar: {reason}")
+    
+        # Chama a função da API para obter os dados iniciais
+        try:
+            logging.info("Chamando get_api_option_init_all_v2.")
+            self.api.get_api_option_init_all_v2()
+        except Exception as e:
+            raise Exception(f"Erro ao chamar get_api_option_init_all_v2: {e}")
+    
+        # Espera pela resposta da API com timeout
         start_t = time.time()
         while self.api.api_option_init_all_result_v2 is None:
             if time.time() - start_t >= 30:
-                logging.error('**warning** get_all_init_v2 late 30 sec')
+                logging.error("**warning** get_all_init_v2 late 30 sec")
                 return None
             logging.debug("Aguardando atualização de api_option_init_all_result_v2...")
             time.sleep(0.5)
-
+    
+        # Retorna o resultado da API se disponível
+        if not self.api.api_option_init_all_result_v2:
+            raise Exception("Falha ao obter os dados da API. Resultado ainda é None após 30 segundos.")
+    
         logging.info("get_all_init_v2 concluído com sucesso.")
-        return self.api.api_option_init_all_result_v2
+        return self.api.api_option_init_all_result_v2      
 
             # return OP_code.ACTIVES
 
