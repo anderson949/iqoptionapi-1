@@ -45,7 +45,7 @@ class IQ_Option:
             "User-Agent": r"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36"}
         self.SESSION_COOKIE = {}
         self.connect()
-        self.api = None
+        #self.api = None
 
         # Caminho para o arquivo constants.py
         self.constants_path = "iqoptionapi/constants.py"
