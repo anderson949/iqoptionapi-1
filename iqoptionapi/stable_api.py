@@ -88,90 +88,35 @@ class IQ_Option:
 
     def connect(self, sms_code=None):
         try:
-            self.api.close()
+            if self.api:
+                self.api.close()  # Fecha qualquer conexão existente
         except:
-            pass
-            # logging.error('**warning** self.api.close() fail')
+            logging.warning('Erro ao fechar conexão anterior.')
 
-        self.api = IQOptionAPI(
-            "iqoption.com", self.email, self.password)
-        check = None
+        self.api = IQOptionAPI("iqoption.com", self.email, self.password)
 
-        # 2FA--
-        if sms_code is not None:
-            self.api.setTokenSMS(self.resp_sms)
+        if sms_code:
+            self.api.setTokenSMS(sms_code)
             status, reason = self.api.connect2fa(sms_code)
             if not status:
-                return status, reason
-        # 2FA--
+                raise Exception(f"Falha na conexão 2FA: {reason}")
 
-        self.api.set_session(headers=self.SESSION_HEADER,
-                             cookies=self.SESSION_COOKIE)
+        status, reason = self.api.connect()
 
-        check, reason = self.api.connect()
+        if not status:
+            raise Exception(f"Erro ao conectar na API: {reason}")
 
-        if check == True:
-            # -------------reconnect subscribe_candle
-            self.re_subscribe_stream()
-
-            # ---------for async get name: "position-changed", microserviceName
-            while global_value.balance_id == None:
-                pass
-
-            self.position_change_all(
-                "subscribeMessage", global_value.balance_id)
-
-            self.order_changed_all("subscribeMessage")
-            self.api.setOptions(1, True)
-
-            """
-            self.api.subscribe_position_changed(
-                "position-changed", "multi-option", 2)
-
-            self.api.subscribe_position_changed(
-                "trading-fx-option.position-changed", "fx-option", 3)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "crypto", 4)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "forex", 5)
-
-            self.api.subscribe_position_changed(
-                "digital-options.position-changed", "digital-option", 6)
-
-            self.api.subscribe_position_changed(
-                "position-changed", "cfd", 7)
-            """
-
-            # self.get_balance_id()
-            return True, None
-        else:
-            if json.loads(reason)['code'] == 'verify':
-                response = self.api.send_sms_code(json.loads(reason)['token'])
-
-                if response.json()['code'] != 'success':
-                    return False, response.json()['message']
-
-                # token_sms
-                self.resp_sms = response
-                return False, "2FA"
-            return False, reason
-
-    # self.update_ACTIVES_OPCODE()
+        logging.info("Conexão bem-sucedida.")
+        return True
 
     def connect_2fa(self, sms_code):
         return self.connect(sms_code=sms_code)
 
     def check_connect(self):
-        # True/False
-        # if not connected, sometimes it's None, sometimes its '0', so
-        # both will fall on this first case
-        if not global_value.check_websocket_if_connect:
+        if not self.api or not global_value.check_websocket_if_connect:
+            self.connect()  # Reconecta automaticamente
             return False
-        else:
-            return True
-        # wait for timestamp getting
+        return True
 
     # _________________________UPDATE ACTIVES OPCODE_____________________
     def get_all_ACTIVES_OPCODE(self):
@@ -319,6 +264,9 @@ class IQ_Option:
                 pass
 
     def get_all_init_v2(self):
+        if not self.api:
+            raise Exception("API não inicializada. Certifique-se de que a conexão foi configurada com sucesso.")
+
         self.api.api_option_init_all_result_v2 = None
         logging.info("Iniciando get_all_init_v2.")
 
@@ -340,9 +288,9 @@ class IQ_Option:
         logging.info("get_all_init_v2 concluído com sucesso.")
         return self.api.api_option_init_all_result_v2
 
-        # return OP_code.ACTIVES
+            # return OP_code.ACTIVES
 
-    # ------- chek if binary/digit/cfd/stock... if open or not
+        # ------- chek if binary/digit/cfd/stock... if open or not
 
     def __get_binary_open(self):
         # for turbo and binary pairs
