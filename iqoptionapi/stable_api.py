@@ -89,31 +89,46 @@ class IQ_Option:
     def connect(self, sms_code=None):
         try:
             if self.api:
-                self.api.close()  # Fecha a conexão existente
-        except:
-            logging.warning("Nenhuma conexão anterior para fechar.")
+                self.api.close()
+                logging.info("Conexão anterior fechada.")
+        except Exception as e:
+            logging.warning(f"Nenhuma conexão anterior para fechar: {e}")
 
-        # Inicializa a API
-        self.api = IQOptionAPI("iqoption.com", self.email, self.password)
+        # Inicializa o objeto API
+        try:
+            self.api = IQOptionAPI("iqoption.com", self.email, self.password)
+            logging.info("Objeto IQOptionAPI inicializado com sucesso.")
+        except Exception as e:
+            logging.error(f"Erro ao inicializar IQOptionAPI: {e}")
+            self.api = None
+            return False, "Falha ao inicializar API"
 
-        # Configuração para autenticação 2FA, se necessário
+        # Autenticação 2FA
         if sms_code:
-            self.api.setTokenSMS(sms_code)
-            status, reason = self.api.connect2fa(sms_code)
+            try:
+                self.api.setTokenSMS(sms_code)
+                status, reason = self.api.connect2fa(sms_code)
+                if not status:
+                    logging.error(f"Falha na conexão 2FA: {reason}")
+                    return False, reason
+            except Exception as e:
+                logging.error(f"Erro na autenticação 2FA: {e}")
+                return False, str(e)
+
+        # Conectar à API
+        try:
+            status, reason = self.api.connect()
             if not status:
-                logging.error(f"Falha na conexão 2FA: {reason}")
-                return False, reason
-
-        # Conecta à API
-        status, reason = self.api.connect()
-
-        if not status:
-            logging.error(f"Erro ao conectar na API: {reason}")
-            self.api = None  # Garante que `self.api` seja `None` em caso de falha
-            return status, reason
+                logging.error(f"Erro ao conectar na API: {reason}")
+                self.api = None
+                return status, reason
+        except Exception as e:
+            logging.error(f"Erro durante a conexão à API: {e}")
+            self.api = None
+            return False, str(e)
 
         logging.info("Conexão com a API bem-sucedida.")
-        return status, reason
+        return True, None
 
     def connect_2fa(self, sms_code):
         return self.connect(sms_code=sms_code)
