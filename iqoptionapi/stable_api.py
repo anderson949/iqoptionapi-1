@@ -31,20 +31,26 @@ class IQ_Option:
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
         self.password = password
+        self.active_account_type = active_account_type
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
         self.subscribe_candle_all_size = []
         self.subscribe_mood = []
         self.subscribe_indicators = []
-        # for digit
         self.get_digital_spot_profit_after_sale_data = nested_dict(2, int)
         self.get_realtime_strike_list_temp_data = {}
         self.get_realtime_strike_list_temp_expiration = 0
         self.SESSION_HEADER = {
             "User-Agent": r"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36"}
         self.SESSION_COOKIE = {}
-        #
+
+        # Caminho para o arquivo constants.py
+        self.constants_path = "iqoptionapi/constants.py"
+
+        # Atualiza constants.py ao iniciar a classe
+        self.update_ACTIVES_OPCODE()
+
         # --start
         # self.connect()
         # this auto function delay too long
@@ -171,29 +177,32 @@ class IQ_Option:
 
     def update_ACTIVES_OPCODE(self):
         """
-        Atualiza o dicionário OP_code.ACTIVES com dados de todas as categorias de ativos,
-        organiza os ativos por ID e gera um arquivo constants.py no diretório iqoptionapi.
+        Atualiza o dicionário OP_code.ACTIVES com dados obtidos de get_all_init_v2
+        e gera o arquivo constants.py.
         """
         try:
-            # Atualizando ativos de opções binárias
-            self.get_ALL_Binary_ACTIVES_OPCODE()
+            # Obtém todos os dados iniciais da API
+            dados = self.get_all_init_v2()
 
-            # Atualizando ativos de outras categorias (crypto, forex, cfd)
-            self.instruments_input_all_in_ACTIVES()
+            if not dados:
+                raise Exception("Falha ao carregar os dados da API usando get_all_init_v2.")
 
             # Dicionário temporário para organizar os ativos
             ativos_atualizados = {}
 
-            # Ordenando e formatando os ativos
-            for ativo_id, ativo_nome in sorted(OP_code.ACTIVES.items(), key=operator.itemgetter(1)):
-                ativo_nome = ativo_nome.replace('front.', '').strip()  # Remover prefixo 'front.'
-                ativos_atualizados[ativo_nome] = ativo_id
+            # Categorias a serem processadas
+            categorias = ['turbo', 'binary', 'crypto', 'forex', 'cfd', 'digital', 'blitz']
+
+            # Extraindo dados de cada categoria
+            for categoria in categorias:
+                if categoria in dados:
+                    for ativo_id, ativo_data in dados[categoria]['actives'].items():
+                        nome = ativo_data.get('name', '').replace('front.', '').strip()
+                        if nome and ativo_id not in ativos_atualizados:
+                            ativos_atualizados[nome] = ativo_id
 
             # Atualizando o dicionário global OP_code.ACTIVES
             OP_code.ACTIVES = ativos_atualizados
-
-            # Caminho para o arquivo constants.py
-            caminho_arquivo = "iqoptionapi/constants.py"
 
             # Gerando o conteúdo do arquivo
             conteudo = [
@@ -203,19 +212,23 @@ class IQ_Option:
                 "'''",
                 "ACTIVES = {"
             ]
-            for i, (nome, ativo_id) in enumerate(ativos_atualizados.items()):
+            for i, (nome, ativo_id) in enumerate(sorted(ativos_atualizados.items(), key=lambda x: x[1])):
                 separador = ',' if i < len(ativos_atualizados) - 1 else ''
                 conteudo.append(f'    "{nome}": {ativo_id}{separador}')
             conteudo.append("}")
 
-            # Escrevendo o conteúdo no arquivo
+            # Caminho para o arquivo constants.py
+            caminho_arquivo = self.constants_path
+
+            # Escrevendo o arquivo constants.py
             with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
                 arquivo.write("\n".join(conteudo))
-        
-            print(f"Arquivo {caminho_arquivo} gerado com sucesso!")
+            
+            print(f"Arquivo {caminho_arquivo} atualizado com sucesso!")
 
         except Exception as e:
             print(f"Erro ao atualizar ativos: {e}")
+            
 
     def get_name_by_activeId(self, activeId):
         info = self.get_financial_information(activeId)
