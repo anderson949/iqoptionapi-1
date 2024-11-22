@@ -171,8 +171,8 @@ class IQ_Option:
 
     def update_ACTIVES_OPCODE(self):
         """
-        Atualiza o dicionário OP_code.ACTIVES com dados de todas as categorias de ativos.
-        Organiza os ativos por ID e formata os nomes.
+        Atualiza o dicionário OP_code.ACTIVES com dados de todas as categorias de ativos,
+        organiza os ativos por ID e gera um arquivo constants.py no diretório iqoptionapi.
         """
         try:
             # Atualizando ativos de opções binárias
@@ -192,18 +192,27 @@ class IQ_Option:
             # Atualizando o dicionário global OP_code.ACTIVES
             OP_code.ACTIVES = ativos_atualizados
 
-            # Gerando saída formatada
-            print("'''")
-            print('Módulo para constantes da API da IQ Option.')
-            print('Atualizado por @stealthlord_anonymous')
-            print("'''")
-            print('ACTIVES = {')
+            # Caminho para o arquivo constants.py
+            caminho_arquivo = "iqoptionapi/constants.py"
 
+            # Gerando o conteúdo do arquivo
+            conteudo = [
+                "'''",
+                "Módulo para constantes da API da IQ Option.",
+                "Atualizado por @stealthlord_anonymous",
+                "'''",
+                "ACTIVES = {"
+            ]
             for i, (nome, ativo_id) in enumerate(ativos_atualizados.items()):
                 separador = ',' if i < len(ativos_atualizados) - 1 else ''
-                print(f'    "{nome}": {ativo_id}{separador}')
+                conteudo.append(f'    "{nome}": {ativo_id}{separador}')
+            conteudo.append("}")
+
+            # Escrevendo o conteúdo no arquivo
+            with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
+                arquivo.write("\n".join(conteudo))
         
-            print('}')
+            print(f"Arquivo {caminho_arquivo} gerado com sucesso!")
 
         except Exception as e:
             print(f"Erro ao atualizar ativos: {e}")
