@@ -46,18 +46,12 @@ class IQ_Option:
         self.SESSION_COOKIE = {}
         self.api = None
         
-        # Define o caminho do arquivo constants.py baseado no arquivo original
-        self.constants_path = os.path.abspath(OP_code.__file__)
+        # Define o caminho absoluto para o arquivo constants.py no diretório iqoptionapi
+        self.constants_path = os.path.join(os.path.dirname(OP_code.__file__), "constants.py")
         
         self.connect()
         # Atualiza constants.py ao iniciar a classe
         self.update_ACTIVES_OPCODE()  # Agora funciona porque self.api está inicializado
-
-        # Caminho para o arquivo constants.py
-        self.constants_path = "constants.py"
-
-        # Atualiza constants.py ao iniciar a classe
-        self.update_ACTIVES_OPCODE()
 
     def get_server_timestamp(self):
         return self.api.timesync.server_timestamp
