@@ -23,7 +23,6 @@ def nested_dict(n, type):
     else:
         return defaultdict(lambda: nested_dict(n - 1, type))
 
-
 class IQ_Option:
     __version__ = api_version
 
@@ -47,8 +46,8 @@ class IQ_Option:
         self.SESSION_COOKIE = {}
         self.api = None
         
-        # Define o caminho para salvar o constants.py no mesmo diretório que stable_api.py
-        self.constants_path = os.path.join(os.path.dirname(__file__), "constants.py")
+        # Define o caminho do arquivo constants.py baseado no arquivo original
+        self.constants_path = os.path.abspath(OP_code.__file__)
         
         self.connect()
         # Atualiza constants.py ao iniciar a classe
