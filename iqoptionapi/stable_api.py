@@ -149,33 +149,33 @@ class IQ_Option:
     def update_ACTIVES_OPCODE(self):
         """
         Atualiza o dicionário OP_code.ACTIVES com dados obtidos de get_all_init_v2
-        e gera o arquivo constants.py.
+        e gera o arquivo constants.py, ordenando os ativos pelo id.
         """
         try:
             # Obtém todos os dados iniciais da API
             dados = self.get_all_init_v2()
-
+    
             if not dados:
                 raise Exception("Falha ao carregar os dados da API usando get_all_init_v2.")
-
+    
             # Dicionário temporário para organizar os ativos
             ativos_atualizados = {}
-
+    
             # Categorias a serem processadas
-            categorias = ['turbo', 'binary', 'crypto', 'forex', 'cfd', 'digital', 'blitz']
-
+            categorias = ['turbo', 'digital', 'binary', 'cfd', 'forex', 'crypto', 'blitz']
+    
             # Extraindo dados de cada categoria
             for categoria in categorias:
                 if categoria in dados:
                     for ativo_id, ativo_data in dados[categoria]['actives'].items():
                         nome = ativo_data.get('name', '').replace('front.', '').strip()
                         if nome and ativo_id not in ativos_atualizados:
-                            ativos_atualizados[nome] = ativo_id
-
-            # Atualizando o dicionário global OP_code.ACTIVES
-            OP_code.ACTIVES = ativos_atualizados
-
-            # Gerando o conteúdo do arquivo ordenado pelos IDs
+                            ativos_atualizados[ativo_id] = nome
+    
+            # Ordenando os ativos pelo id numérico
+            ativos_ordenados = sorted(ativos_atualizados.items(), key=lambda x: int(x[0]))
+    
+            # Gerando o conteúdo do arquivo
             conteudo = [
                 "'''",
                 "Módulo para constantes da API da IQ Option.",
@@ -183,22 +183,22 @@ class IQ_Option:
                 "'''",
                 "ACTIVES = {"
             ]
-
-            # Ordena os ativos pelo índice e os adiciona ao arquivo
-            for i, (nome, ativo_id) in enumerate(sorted(ativos_atualizados.items(), key=lambda x: x[1])):
-                separador = ',' if i < len(ativos_atualizados) - 1 else ''
+    
+            # Adicionando ativos ordenados ao conteúdo do arquivo
+            for i, (ativo_id, nome) in enumerate(ativos_ordenados):
+                separador = ',' if i < len(ativos_ordenados) - 1 else ''
                 conteudo.append(f'    "{nome}": {ativo_id}{separador}')
             conteudo.append("}")
-
+    
             # Caminho para o arquivo constants.py
             caminho_arquivo = self.constants_path
-
+    
             # Escrevendo o arquivo constants.py
             with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
                 arquivo.write("\n".join(conteudo))
-
+    
             logging.info(f"Arquivo {caminho_arquivo} atualizado com sucesso!")
-
+    
         except Exception as e:
             logging.error(f"Erro ao atualizar ativos: {e}")
             
