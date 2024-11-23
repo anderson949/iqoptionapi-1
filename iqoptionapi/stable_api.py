@@ -14,6 +14,7 @@ from iqoptionapi.expiration import get_expiration_time, get_remaning_time
 from iqoptionapi.version_control import api_version
 from datetime import datetime, timedelta
 from random import randint
+import os
 
 
 def nested_dict(n, type):
@@ -45,7 +46,10 @@ class IQ_Option:
             "User-Agent": r"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36"}
         self.SESSION_COOKIE = {}
         self.api = None
-        self.constants_path = "constants.py"
+        
+        # Define o caminho para salvar o constants.py no mesmo diretório que stable_api.py
+        self.constants_path = os.path.join(os.path.dirname(__file__), "constants.py")
+        
         self.connect()
         # Atualiza constants.py ao iniciar a classe
         self.update_ACTIVES_OPCODE()  # Agora funciona porque self.api está inicializado
