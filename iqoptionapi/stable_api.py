@@ -175,7 +175,7 @@ class IQ_Option:
             # Atualizando o dicionário global OP_code.ACTIVES
             OP_code.ACTIVES = ativos_atualizados
 
-            # Gerando o conteúdo do arquivo
+            # Gerando o conteúdo do arquivo ordenado pelos IDs
             conteudo = [
                 "'''",
                 "Módulo para constantes da API da IQ Option.",
@@ -183,6 +183,8 @@ class IQ_Option:
                 "'''",
                 "ACTIVES = {"
             ]
+
+            # Ordena os ativos pelo índice e os adiciona ao arquivo
             for i, (nome, ativo_id) in enumerate(sorted(ativos_atualizados.items(), key=lambda x: x[1])):
                 separador = ',' if i < len(ativos_atualizados) - 1 else ''
                 conteudo.append(f'    "{nome}": {ativo_id}{separador}')
@@ -195,10 +197,11 @@ class IQ_Option:
             with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
                 arquivo.write("\n".join(conteudo))
 
-        except Exception as e:
-            print(f"Erro ao atualizar ativos: {e}")
-            
+            logging.info(f"Arquivo {caminho_arquivo} atualizado com sucesso!")
 
+        except Exception as e:
+            logging.error(f"Erro ao atualizar ativos: {e}")
+            
     def get_name_by_activeId(self, activeId):
         info = self.get_financial_information(activeId)
         try:
