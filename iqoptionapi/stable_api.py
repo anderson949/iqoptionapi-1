@@ -912,67 +912,115 @@ class IQ_Option:
         logging.error('get_remaning(self,duration) ERROR duration')
         return "ERROR duration"
 
-    def buy_by_raw_expirations(self, price, active, direction, option, expired):
+def buy_by_raw_expirations(self, price, active, direction, option, expired):
+    self.api.buy_multi_option = {}
+    self.api.buy_successful = None
+    req_id = "buyraw"
 
-        self.api.buy_multi_option = {}
-        self.api.buy_successful = None
-        req_id = "buyraw"
-        try:
-            self.api.buy_multi_option[req_id]["id"] = None
-        except:
-            pass
+    try:
+        self.api.buy_multi_option[req_id] = {"id": None}  # Inicializa
+    except Exception as e:
+        logging.error(f"Erro ao inicializar requisição: {e}")
+
+    # Envia requisição de compra
+    try:
         self.api.buyv3_by_raw_expired(
-            price, OP_code.ACTIVES[active], direction, option, expired, request_id=req_id)
-        start_t = time.time()
-        id = None
-        self.api.result = None
-        while self.api.result == None or id == None:
-            try:
-                if "message" in self.api.buy_multi_option[req_id].keys():
-                    logging.error(
-                        '**warning** buy' + str(self.api.buy_multi_option[req_id]["message"]))
-                    return False, self.api.buy_multi_option[req_id]["message"]
-            except:
-                pass
-            try:
-                id = self.api.buy_multi_option[req_id]["id"]
-            except:
-                pass
-            if time.time() - start_t >= 5:
-                logging.error('**warning** buy late 5 sec')
-                return False, None
+            price, OP_code.ACTIVES[active], direction, option, expired, request_id=req_id
+        )
+    except Exception as e:
+        logging.error(f"Erro ao enviar compra: {e}")
+        return False, f"Falha na compra: {e}"
 
-        return self.api.result, self.api.buy_multi_option[req_id]["id"]
+    # Monitora resposta da API
+    start_t = time.time()
+    timeout = 10  # Tempo limite de espera
+    id = None
+    self.api.result = None
 
-    def buy(self, price, ACTIVES, ACTION, expirations):
-        self.api.buy_multi_option = {}
-        self.api.buy_successful = None
-        # req_id = "buy"
-        req_id = str(randint(0, 10000))
+    while self.api.result is None or id is None:
         try:
-            self.api.buy_multi_option[req_id]["id"] = None
-        except:
-            pass
-        self.api.buyv3(
-            float(price), OP_code.ACTIVES[ACTIVES], str(ACTION), int(expirations), req_id)
-        start_t = time.time()
-        id = None
-        self.api.result = None
-        while self.api.result == None or id == None:
-            try:
-                if "message" in self.api.buy_multi_option[req_id].keys():
-                    return False, self.api.buy_multi_option[req_id]["message"]
-            except:
-                pass
-            try:
-                id = self.api.buy_multi_option[req_id]["id"]
-            except:
-                pass
-            if time.time() - start_t >= 5:
-                logging.error('**warning** buy late 5 sec')
-                return False, None
+            # Verifica mensagens de erro
+            if "message" in self.api.buy_multi_option[req_id]:
+                error_message = self.api.buy_multi_option[req_id]["message"]
+                logging.error(f"**warning** buy {error_message}")
+                return False, error_message
 
-        return self.api.result, self.api.buy_multi_option[req_id]["id"]
+            # Verifica ID
+            id = self.api.buy_multi_option[req_id].get("id")
+        except KeyError as e:
+            logging.debug(f"Chave ausente: {e}")
+
+        # Checa timeout
+        if time.time() - start_t >= timeout:
+            logging.error(f"**warning** buy late {timeout} sec")
+            return False, None
+
+        time.sleep(0.5)  # Reduz a carga do loop
+
+    return self.api.result, id
+
+def buy(self, price, ACTIVES, ACTION, expirations):
+    self.api.buy_multi_option = {}
+    self.api.buy_successful = None
+    req_id = str(randint(0, 10000))  # Gera ID único para a requisição
+    
+    try:
+        # Inicializa a estrutura para armazenar o ID
+        self.api.buy_multi_option[req_id] = {"id": None}
+    except Exception as e:
+        logging.error(f"Erro ao inicializar estrutura para requisição: {e}")
+        return False, f"Erro de inicialização: {e}"
+
+    # Verifica a conexão antes de prosseguir
+    if not self.check_connect():
+        logging.error("Erro: conexão com a API perdida.")
+        return False, "Erro de conexão com a API"
+
+    # Envia a solicitação de compra
+    try:
+        self.api.buyv3(
+            float(price),
+            OP_code.ACTIVES[ACTIVES],
+            str(ACTION),
+            int(expirations),
+            req_id
+        )
+        logging.info(f"Compra enviada: req_id={req_id}, ativo={ACTIVES}")
+    except Exception as e:
+        logging.error(f"Erro ao enviar compra: {e}")
+        return False, f"Erro ao enviar compra: {e}"
+
+    # Espera pela resposta da API
+    start_t = time.time()
+    timeout = 10  # Tempo limite em segundos
+    id = None
+    self.api.result = None
+
+    while self.api.result is None or id is None:
+        try:
+            # Verifica se há mensagem de erro
+            if "message" in self.api.buy_multi_option[req_id]:
+                error_message = self.api.buy_multi_option[req_id]["message"]
+                logging.error(f"**warning** buy {error_message}")
+                return False, error_message
+
+            # Recupera o ID da compra, se disponível
+            id = self.api.buy_multi_option[req_id].get("id")
+        except KeyError as e:
+            logging.warning(f"Chave ausente no resultado: {e}")
+        except Exception as e:
+            logging.error(f"Erro ao processar resposta: {e}")
+
+        # Verifica o tempo limite
+        if time.time() - start_t >= timeout:
+            logging.error(f"**warning** buy late {timeout} sec")
+            return False, None
+
+        # Espera brevemente para evitar sobrecarga
+        time.sleep(0.5)
+
+    # Retorna o resultado final
+    return self.api.result, id
 
     def sell_option(self, options_ids):
         self.api.sell_option(options_ids)
