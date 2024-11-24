@@ -347,17 +347,23 @@ class IQ_Option:
                             self.OPEN_TIME[option][name]["open"] = active["enabled"]    
 
     def __get_digital_open(self):
-        # for digital options
-        digital_data = self.get_digital_underlying_list_data()["underlying"]
-        for digital in digital_data:
-            name = digital["underlying"]
-            schedule = digital["schedule"]
-            self.OPEN_TIME["digital"][name]["open"] = False
-            for schedule_time in schedule:
-                start = schedule_time["open"]
-                end = schedule_time["close"]
-                if start < time.time() < end:
-                    self.OPEN_TIME["digital"][name]["open"] = True
+        try:
+            digital_data = self.get_digital_underlying_list_data()
+            if digital_data is None:
+                logging.error("Dados digitais não disponíveis")
+                return
+    
+            for digital in digital_data.get("underlying", []):
+                name = digital["underlying"]
+                schedule = digital["schedule"]
+                self.OPEN_TIME["digital"][name]["open"] = False
+                for schedule_time in schedule:
+                    start = schedule_time["open"]
+                    end = schedule_time["close"]
+                    if start < time.time() < end:
+                        self.OPEN_TIME["digital"][name]["open"] = True
+        except AttributeError:
+            logging.error("O método get_digital_underlying_list_data está ausente.")
 
     def __get_other_open(self):
         # Crypto and etc pairs
@@ -912,115 +918,115 @@ class IQ_Option:
         logging.error('get_remaning(self,duration) ERROR duration')
         return "ERROR duration"
 
-def buy_by_raw_expirations(self, price, active, direction, option, expired):
-    self.api.buy_multi_option = {}
-    self.api.buy_successful = None
-    req_id = "buyraw"
-
-    try:
-        self.api.buy_multi_option[req_id] = {"id": None}  # Inicializa
-    except Exception as e:
-        logging.error(f"Erro ao inicializar requisição: {e}")
-
-    # Envia requisição de compra
-    try:
-        self.api.buyv3_by_raw_expired(
-            price, OP_code.ACTIVES[active], direction, option, expired, request_id=req_id
-        )
-    except Exception as e:
-        logging.error(f"Erro ao enviar compra: {e}")
-        return False, f"Falha na compra: {e}"
-
-    # Monitora resposta da API
-    start_t = time.time()
-    timeout = 10  # Tempo limite de espera
-    id = None
-    self.api.result = None
-
-    while self.api.result is None or id is None:
-        try:
-            # Verifica mensagens de erro
-            if "message" in self.api.buy_multi_option[req_id]:
-                error_message = self.api.buy_multi_option[req_id]["message"]
-                logging.error(f"**warning** buy {error_message}")
-                return False, error_message
-
-            # Verifica ID
-            id = self.api.buy_multi_option[req_id].get("id")
-        except KeyError as e:
-            logging.debug(f"Chave ausente: {e}")
-
-        # Checa timeout
-        if time.time() - start_t >= timeout:
-            logging.error(f"**warning** buy late {timeout} sec")
-            return False, None
-
-        time.sleep(0.5)  # Reduz a carga do loop
-
-    return self.api.result, id
-
-def buy(self, price, ACTIVES, ACTION, expirations):
-    self.api.buy_multi_option = {}
-    self.api.buy_successful = None
-    req_id = str(randint(0, 10000))  # Gera ID único para a requisição
+    def buy_by_raw_expirations(self, price, active, direction, option, expired):
+        self.api.buy_multi_option = {}
+        self.api.buy_successful = None
+        req_id = "buyraw"
     
-    try:
-        # Inicializa a estrutura para armazenar o ID
-        self.api.buy_multi_option[req_id] = {"id": None}
-    except Exception as e:
-        logging.error(f"Erro ao inicializar estrutura para requisição: {e}")
-        return False, f"Erro de inicialização: {e}"
-
-    # Verifica a conexão antes de prosseguir
-    if not self.check_connect():
-        logging.error("Erro: conexão com a API perdida.")
-        return False, "Erro de conexão com a API"
-
-    # Envia a solicitação de compra
-    try:
-        self.api.buyv3(
-            float(price),
-            OP_code.ACTIVES[ACTIVES],
-            str(ACTION),
-            int(expirations),
-            req_id
-        )
-        logging.info(f"Compra enviada: req_id={req_id}, ativo={ACTIVES}")
-    except Exception as e:
-        logging.error(f"Erro ao enviar compra: {e}")
-        return False, f"Erro ao enviar compra: {e}"
-
-    # Espera pela resposta da API
-    start_t = time.time()
-    timeout = 10  # Tempo limite em segundos
-    id = None
-    self.api.result = None
-
-    while self.api.result is None or id is None:
         try:
-            # Verifica se há mensagem de erro
-            if "message" in self.api.buy_multi_option[req_id]:
-                error_message = self.api.buy_multi_option[req_id]["message"]
-                logging.error(f"**warning** buy {error_message}")
-                return False, error_message
-
-            # Recupera o ID da compra, se disponível
-            id = self.api.buy_multi_option[req_id].get("id")
-        except KeyError as e:
-            logging.warning(f"Chave ausente no resultado: {e}")
+            self.api.buy_multi_option[req_id] = {"id": None}  # Inicializa
         except Exception as e:
-            logging.error(f"Erro ao processar resposta: {e}")
-
-        # Verifica o tempo limite
-        if time.time() - start_t >= timeout:
-            logging.error(f"**warning** buy late {timeout} sec")
-            return False, None
-
-        # Espera brevemente para evitar sobrecarga
-        time.sleep(0.5)
-
-    # Retorna o resultado final
-    return self.api.result, id
+            logging.error(f"Erro ao inicializar requisição: {e}")
+    
+        # Envia requisição de compra
+        try:
+            self.api.buyv3_by_raw_expired(
+                price, OP_code.ACTIVES[active], direction, option, expired, request_id=req_id
+            )
+        except Exception as e:
+            logging.error(f"Erro ao enviar compra: {e}")
+            return False, f"Falha na compra: {e}"
+    
+        # Monitora resposta da API
+        start_t = time.time()
+        timeout = 10  # Tempo limite de espera
+        id = None
+        self.api.result = None
+    
+        while self.api.result is None or id is None:
+            try:
+                # Verifica mensagens de erro
+                if "message" in self.api.buy_multi_option[req_id]:
+                    error_message = self.api.buy_multi_option[req_id]["message"]
+                    logging.error(f"**warning** buy {error_message}")
+                    return False, error_message
+    
+                # Verifica ID
+                id = self.api.buy_multi_option[req_id].get("id")
+            except KeyError as e:
+                logging.debug(f"Chave ausente: {e}")
+    
+            # Checa timeout
+            if time.time() - start_t >= timeout:
+                logging.error(f"**warning** buy late {timeout} sec")
+                return False, None
+    
+            time.sleep(0.5)  # Reduz a carga do loop
+    
+        return self.api.result, id
+    
+    def buy(self, price, ACTIVES, ACTION, expirations):
+        self.api.buy_multi_option = {}
+        self.api.buy_successful = None
+        req_id = str(randint(0, 10000))  # Gera ID único para a requisição
+        
+        try:
+            # Inicializa a estrutura para armazenar o ID
+            self.api.buy_multi_option[req_id] = {"id": None}
+        except Exception as e:
+            logging.error(f"Erro ao inicializar estrutura para requisição: {e}")
+            return False, f"Erro de inicialização: {e}"
+    
+        # Verifica a conexão antes de prosseguir
+        if not self.check_connect():
+            logging.error("Erro: conexão com a API perdida.")
+            return False, "Erro de conexão com a API"
+    
+        # Envia a solicitação de compra
+        try:
+            self.api.buyv3(
+                float(price),
+                OP_code.ACTIVES[ACTIVES],
+                str(ACTION),
+                int(expirations),
+                req_id
+            )
+            logging.info(f"Compra enviada: req_id={req_id}, ativo={ACTIVES}")
+        except Exception as e:
+            logging.error(f"Erro ao enviar compra: {e}")
+            return False, f"Erro ao enviar compra: {e}"
+    
+        # Espera pela resposta da API
+        start_t = time.time()
+        timeout = 10  # Tempo limite em segundos
+        id = None
+        self.api.result = None
+    
+        while self.api.result is None or id is None:
+            try:
+                # Verifica se há mensagem de erro
+                if "message" in self.api.buy_multi_option[req_id]:
+                    error_message = self.api.buy_multi_option[req_id]["message"]
+                    logging.error(f"**warning** buy {error_message}")
+                    return False, error_message
+    
+                # Recupera o ID da compra, se disponível
+                id = self.api.buy_multi_option[req_id].get("id")
+            except KeyError as e:
+                logging.warning(f"Chave ausente no resultado: {e}")
+            except Exception as e:
+                logging.error(f"Erro ao processar resposta: {e}")
+    
+            # Verifica o tempo limite
+            if time.time() - start_t >= timeout:
+                logging.error(f"**warning** buy late {timeout} sec")
+                return False, None
+    
+            # Espera brevemente para evitar sobrecarga
+            time.sleep(0.5)
+    
+        # Retorna o resultado final
+        return self.api.result, id
 
     def sell_option(self, options_ids):
         self.api.sell_option(options_ids)
@@ -1041,10 +1047,14 @@ def buy(self, price, ACTIVES, ACTION, expirations):
         self.api.underlying_list_data = None
         self.api.get_digital_underlying()
         start_t = time.time()
-        while self.api.underlying_list_data == None:
+    
+        # Aguarda a resposta da API com timeout
+        while self.api.underlying_list_data is None:
             if time.time() - start_t >= 30:
-                return 
-
+                logging.error("Timeout ao obter digital_underlying_list_data")
+                return None
+            time.sleep(0.5)
+    
         return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
