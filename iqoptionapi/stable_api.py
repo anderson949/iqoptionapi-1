@@ -969,9 +969,9 @@ class IQ_Option:
         self.api.buy_multi_option = {}
         self.api.buy_successful = None
         req_id = str(randint(0, 10000))  # ID único para a compra
-        timeout = 20  # Tempo limite ajustado
+        timeout = 30  # Tempo limite ajustado
         retry_count = 3  # Número de tentativas
-        
+    
         try:
             self.api.buy_multi_option[req_id] = {"id": None}
         except Exception as e:
@@ -1016,15 +1016,30 @@ class IQ_Option:
                     id = self.api.buy_multi_option[req_id].get("id")
                 except KeyError:
                     logging.warning("ID ainda não disponível...")
-                time.sleep(0.5)  # Reduz carga do loop
+                time.sleep(0.5)
     
             if id is not None:
-                return self.api.result, id
-            logging.warning(f"Tentativa {attempt + 1} falhou. Retentando...")
-            time.sleep(2)  # Espera antes de nova tentativa
+                # Recupera o resultado da operação
+                result = self.get_result(req_id)
+                if result:
+                    return result, id
+                logging.error("Falha ao recuperar o resultado da operação.")
     
-        logging.error("Todas as tentativas de compra excederam o tempo limite.")
+            logging.warning(f"Tentativa {attempt + 1} falhou. Retentando...")
+            time.sleep(2)
+    
+        logging.error("Todas as tentativas de compra falharam.")
         return False, None
+    
+    def get_result(self, req_id):
+        start_t = time.time()
+        while time.time() - start_t < 30:  # Timeout de 30 segundos
+            if req_id in self.api.buy_multi_option:
+                logging.info(f"Resultado obtido para o ID {req_id}: {self.api.buy_multi_option[req_id]}")
+                return self.api.buy_multi_option[req_id]
+            time.sleep(0.5)
+        logging.error(f"Resultado para {req_id} não recebido dentro do tempo limite.")
+        return None
 
     def sell_option(self, options_ids):
         self.api.sell_option(options_ids)
