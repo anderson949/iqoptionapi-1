@@ -968,65 +968,63 @@ class IQ_Option:
     def buy(self, price, ACTIVES, ACTION, expirations):
         self.api.buy_multi_option = {}
         self.api.buy_successful = None
-        req_id = str(randint(0, 10000))  # Gera ID único para a requisição
+        req_id = str(randint(0, 10000))  # ID único para a compra
+        timeout = 20  # Tempo limite ajustado
+        retry_count = 3  # Número de tentativas
         
         try:
-            # Inicializa a estrutura para armazenar o ID
             self.api.buy_multi_option[req_id] = {"id": None}
         except Exception as e:
-            logging.error(f"Erro ao inicializar estrutura para requisição: {e}")
-            return False, f"Erro de inicialização: {e}"
+            logging.error(f"Erro ao inicializar requisição: {e}")
+            return False, f"Erro: {e}"
     
-        # Verifica a conexão antes de prosseguir
+        # Verificar conexão antes de prosseguir
         if not self.check_connect():
-            logging.error("Erro: conexão com a API perdida.")
-            return False, "Erro de conexão com a API"
+            logging.error("Conexão com a API perdida.")
+            return False, "Erro de conexão"
     
-        # Envia a solicitação de compra
-        try:
-            self.api.buyv3(
-                float(price),
-                OP_code.ACTIVES[ACTIVES],
-                str(ACTION),
-                int(expirations),
-                req_id
-            )
-            logging.info(f"Compra enviada: req_id={req_id}, ativo={ACTIVES}")
-        except Exception as e:
-            logging.error(f"Erro ao enviar compra: {e}")
-            return False, f"Erro ao enviar compra: {e}"
-    
-        # Espera pela resposta da API
-        start_t = time.time()
-        timeout = 10  # Tempo limite em segundos
-        id = None
-        self.api.result = None
-    
-        while self.api.result is None or id is None:
+        for attempt in range(retry_count):
             try:
-                # Verifica se há mensagem de erro
-                if "message" in self.api.buy_multi_option[req_id]:
-                    error_message = self.api.buy_multi_option[req_id]["message"]
-                    logging.error(f"**warning** buy {error_message}")
-                    return False, error_message
-    
-                # Recupera o ID da compra, se disponível
-                id = self.api.buy_multi_option[req_id].get("id")
-            except KeyError as e:
-                logging.warning(f"Chave ausente no resultado: {e}")
+                # Enviar solicitação de compra
+                self.api.buyv3(
+                    float(price),
+                    OP_code.ACTIVES[ACTIVES],
+                    str(ACTION),
+                    int(expirations),
+                    req_id
+                )
+                logging.info(f"Compra enviada: {ACTIVES}, req_id={req_id}")
             except Exception as e:
-                logging.error(f"Erro ao processar resposta: {e}")
+                logging.error(f"Erro ao enviar compra: {e}")
+                return False, f"Erro: {e}"
     
-            # Verifica o tempo limite
-            if time.time() - start_t >= timeout:
-                logging.error(f"**warning** buy late {timeout} sec")
-                return False, None
+            # Aguardar resposta da API
+            start_t = time.time()
+            id = None
+            self.api.result = None
     
-            # Espera brevemente para evitar sobrecarga
-            time.sleep(0.5)
+            while self.api.result is None or id is None:
+                if time.time() - start_t >= timeout:
+                    logging.error(f"**warning** buy late {timeout} sec (tentativa {attempt + 1})")
+                    break
     
-        # Retorna o resultado final
-        return self.api.result, id
+                try:
+                    if "message" in self.api.buy_multi_option[req_id]:
+                        error_message = self.api.buy_multi_option[req_id]["message"]
+                        logging.error(f"Erro na compra: {error_message}")
+                        return False, error_message
+                    id = self.api.buy_multi_option[req_id].get("id")
+                except KeyError:
+                    logging.warning("ID ainda não disponível...")
+                time.sleep(0.5)  # Reduz carga do loop
+    
+            if id is not None:
+                return self.api.result, id
+            logging.warning(f"Tentativa {attempt + 1} falhou. Retentando...")
+            time.sleep(2)  # Espera antes de nova tentativa
+    
+        logging.error("Todas as tentativas de compra excederam o tempo limite.")
+        return False, None
 
     def sell_option(self, options_ids):
         self.api.sell_option(options_ids)
