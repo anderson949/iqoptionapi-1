@@ -84,14 +84,12 @@ class IQ_Option:
         try:
             if self.api:
                 self.api.close()
-                logging.info("Conexão anterior fechada.")
         except Exception as e:
             logging.warning(f"Nenhuma conexão anterior para fechar: {e}")
 
         # Inicializa o objeto API
         try:
             self.api = IQOptionAPI("iqoption.com", self.email, self.password)
-            logging.info("Objeto IQOptionAPI inicializado com sucesso.")
         except Exception as e:
             logging.error(f"Erro ao inicializar IQOptionAPI: {e}")
             self.api = None
@@ -113,15 +111,12 @@ class IQ_Option:
         try:
             status, reason = self.api.connect()
             if not status:
-                logging.error(f"Erro ao conectar na API: {reason}")
                 self.api = None
                 return status, reason
         except Exception as e:
             logging.error(f"Erro durante a conexão à API: {e}")
             self.api = None
             return False, str(e)
-
-        logging.info("Conexão com a API bem-sucedida.")
         return True, None
 
     def connect_2fa(self, sms_code):
@@ -129,11 +124,9 @@ class IQ_Option:
 
     def check_connect(self):
         if not self.api:
-            logging.error("API não inicializada.")
             return False
 
         if not global_value.check_websocket_if_connect:
-            logging.warning("WebSocket desconectado. Tentando reconectar...")
             self.connect()
             return False
 
@@ -193,8 +186,6 @@ class IQ_Option:
             # Escrevendo o arquivo constants.py
             with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
                 arquivo.write("\n".join(conteudo))
-    
-            logging.info(f"Arquivo {caminho_arquivo} atualizado com sucesso!")
     
         except Exception as e:
             logging.error(f"Erro ao atualizar ativos: {e}")
@@ -292,18 +283,15 @@ class IQ_Option:
     
         # Reseta o resultado para evitar dados antigos
         self.api.api_option_init_all_result_v2 = None
-        logging.info("Iniciando get_all_init_v2.")
     
         # Verifica a conexão e reconecta, se necessário
         if not self.check_connect():
-            logging.warning("Conexão perdida. Tentando reconectar...")
             status, reason = self.connect()
             if not status:
                 raise Exception(f"Falha ao reconectar: {reason}")
     
         # Chama a função da API para obter os dados iniciais
         try:
-            logging.info("Chamando get_api_option_init_all_v2.")
             self.api.get_api_option_init_all_v2()
         except Exception as e:
             raise Exception(f"Erro ao chamar get_api_option_init_all_v2: {e}")
@@ -315,7 +303,7 @@ class IQ_Option:
                 logging.error("**warning** get_all_init_v2 late 30 sec")
                 return None
             logging.debug("Aguardando atualização de api_option_init_all_result_v2...")
-            time.sleep(0.5)
+            time.sleep(0.2)
     
         # Retorna o resultado da API se disponível
         if not self.api.api_option_init_all_result_v2:
@@ -966,22 +954,29 @@ class IQ_Option:
         return self.api.result, id
     
     def buy(self, price, ACTIVES, ACTION, expirations):
+        """
+        Método para realizar compras. Inclui tratamento de timeout e reconexão automática.
+        """
         self.api.buy_multi_option = {}
         self.api.buy_successful = None
         req_id = str(randint(0, 10000))  # ID único para a compra
-        timeout = 30  # Tempo limite ajustado
-        retry_count = 3  # Número de tentativas
-    
+        timeout = 30  # Tempo limite ajustado para cada tentativa
+        retry_count = 3  # Número de tentativas permitidas
+        
+        # Inicializa o registro da compra
         try:
             self.api.buy_multi_option[req_id] = {"id": None}
         except Exception as e:
             logging.error(f"Erro ao inicializar requisição: {e}")
             return False, f"Erro: {e}"
-    
-        # Verificar conexão antes de prosseguir
+        
+        # Verifica a conexão antes de continuar
         if not self.check_connect():
-            logging.error("Conexão com a API perdida.")
-            return False, "Erro de conexão"
+            logging.error("Conexão com a API perdida. Tentando reconectar...")
+            status, reason = self.connect()
+            if not status:
+                logging.error(f"Reconexão falhou: {reason}")
+                return False, "Erro de conexão"
     
         for attempt in range(retry_count):
             try:
@@ -993,26 +988,29 @@ class IQ_Option:
                     int(expirations),
                     req_id
                 )
-                logging.info(f"Compra enviada: {ACTIVES}, req_id={req_id}")
+                logging.info(f"Compra enviada: {ACTIVES}, req_id={req_id}, tentativa {attempt + 1}")
             except Exception as e:
-                logging.error(f"Erro ao enviar compra: {e}")
+                logging.error(f"Erro ao enviar compra na tentativa {attempt + 1}: {e}")
                 return False, f"Erro: {e}"
-    
-            # Aguardar resposta da API
+            
+            # Aguarda a resposta da API
             start_t = time.time()
             id = None
             self.api.result = None
-    
+            
             while self.api.result is None or id is None:
                 if time.time() - start_t >= timeout:
-                    logging.error(f"**warning** buy late {timeout} sec (tentativa {attempt + 1})")
+                    logging.warning(f"**warning** buy late {timeout} sec (tentativa {attempt + 1})")
                     break
     
                 try:
+                    # Verifica se há mensagem de erro da API
                     if "message" in self.api.buy_multi_option[req_id]:
                         error_message = self.api.buy_multi_option[req_id]["message"]
                         logging.error(f"Erro na compra: {error_message}")
                         return False, error_message
+                    
+                    # Obtém o ID de compra
                     id = self.api.buy_multi_option[req_id].get("id")
                 except KeyError:
                     logging.warning("ID ainda não disponível...")
@@ -1022,9 +1020,10 @@ class IQ_Option:
                 # Recupera o resultado da operação
                 result = self.get_result(req_id)
                 if result:
+                    logging.info(f"Compra realizada com sucesso. Resultado: {result}")
                     return result, id
                 logging.error("Falha ao recuperar o resultado da operação.")
-    
+            
             logging.warning(f"Tentativa {attempt + 1} falhou. Retentando...")
             time.sleep(2)
     
@@ -1032,6 +1031,9 @@ class IQ_Option:
         return False, None
     
     def get_result(self, req_id):
+        """
+        Recupera o resultado de uma operação com base no req_id.
+        """
         start_t = time.time()
         while time.time() - start_t < 30:  # Timeout de 30 segundos
             if req_id in self.api.buy_multi_option:
