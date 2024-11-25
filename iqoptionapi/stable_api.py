@@ -14,7 +14,6 @@ from iqoptionapi.expiration import get_expiration_time, get_remaning_time
 from iqoptionapi.version_control import api_version
 from datetime import datetime, timedelta
 from random import randint
-import os
 
 
 def nested_dict(n, type):
@@ -22,6 +21,7 @@ def nested_dict(n, type):
         return defaultdict(type)
     else:
         return defaultdict(lambda: nested_dict(n - 1, type))
+
 
 class IQ_Option:
     __version__ = api_version
@@ -31,27 +31,25 @@ class IQ_Option:
                      3600, 7200, 14400, 28800, 43200, 86400, 604800, 2592000]
         self.email = email
         self.password = password
-        self.active_account_type = active_account_type
         self.suspend = 0.5
         self.thread = None
         self.subscribe_candle = []
         self.subscribe_candle_all_size = []
         self.subscribe_mood = []
         self.subscribe_indicators = []
+        # for digit
         self.get_digital_spot_profit_after_sale_data = nested_dict(2, int)
         self.get_realtime_strike_list_temp_data = {}
         self.get_realtime_strike_list_temp_expiration = 0
         self.SESSION_HEADER = {
             "User-Agent": r"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36"}
         self.SESSION_COOKIE = {}
-        self.api = None
-        
-        # Define o caminho absoluto para o arquivo constants.py no diretório iqoptionapi
-        self.constants_path = os.path.join(os.path.dirname(OP_code.__file__), "constants.py")
-        
-        self.connect()
-        # Atualiza constants.py ao iniciar a classe
-        self.update_ACTIVES_OPCODE()  # Agora funciona porque self.api está inicializado
+        #
+        # --start
+        # self.connect()
+        # this auto function delay too long
+
+    # --------------------------------------------------------------------------
 
     def get_server_timestamp(self):
         return self.api.timesync.server_timestamp
@@ -82,114 +80,105 @@ class IQ_Option:
 
     def connect(self, sms_code=None):
         try:
-            if self.api:
-                self.api.close()
-        except Exception as e:
-            logging.warning(f"Nenhuma conexão anterior para fechar: {e}")
+            self.api.close()
+        except:
+            pass
+            # logging.error('**warning** self.api.close() fail')
 
-        # Inicializa o objeto API
-        try:
-            self.api = IQOptionAPI("iqoption.com", self.email, self.password)
-        except Exception as e:
-            logging.error(f"Erro ao inicializar IQOptionAPI: {e}")
-            self.api = None
-            return False, "Falha ao inicializar API"
+        self.api = IQOptionAPI(
+            "iqoption.com", self.email, self.password)
+        check = None
 
-        # Autenticação 2FA
-        if sms_code:
-            try:
-                self.api.setTokenSMS(sms_code)
-                status, reason = self.api.connect2fa(sms_code)
-                if not status:
-                    logging.error(f"Falha na conexão 2FA: {reason}")
-                    return False, reason
-            except Exception as e:
-                logging.error(f"Erro na autenticação 2FA: {e}")
-                return False, str(e)
-
-        # Conectar à API
-        try:
-            status, reason = self.api.connect()
+        # 2FA--
+        if sms_code is not None:
+            self.api.setTokenSMS(self.resp_sms)
+            status, reason = self.api.connect2fa(sms_code)
             if not status:
-                self.api = None
                 return status, reason
-        except Exception as e:
-            logging.error(f"Erro durante a conexão à API: {e}")
-            self.api = None
-            return False, str(e)
-        return True, None
+        # 2FA--
+
+        self.api.set_session(headers=self.SESSION_HEADER,
+                             cookies=self.SESSION_COOKIE)
+
+        check, reason = self.api.connect()
+
+        if check == True:
+            # -------------reconnect subscribe_candle
+            self.re_subscribe_stream()
+
+            # ---------for async get name: "position-changed", microserviceName
+            while global_value.balance_id == None:
+                pass
+
+            self.position_change_all(
+                "subscribeMessage", global_value.balance_id)
+
+            self.order_changed_all("subscribeMessage")
+            self.api.setOptions(1, True)
+
+            """
+            self.api.subscribe_position_changed(
+                "position-changed", "multi-option", 2)
+
+            self.api.subscribe_position_changed(
+                "trading-fx-option.position-changed", "fx-option", 3)
+
+            self.api.subscribe_position_changed(
+                "position-changed", "crypto", 4)
+
+            self.api.subscribe_position_changed(
+                "position-changed", "forex", 5)
+
+            self.api.subscribe_position_changed(
+                "digital-options.position-changed", "digital-option", 6)
+
+            self.api.subscribe_position_changed(
+                "position-changed", "cfd", 7)
+            """
+
+            # self.get_balance_id()
+            return True, None
+        else:
+            if json.loads(reason)['code'] == 'verify':
+                response = self.api.send_sms_code(json.loads(reason)['token'])
+
+                if response.json()['code'] != 'success':
+                    return False, response.json()['message']
+
+                # token_sms
+                self.resp_sms = response
+                return False, "2FA"
+            return False, reason
+
+    # self.update_ACTIVES_OPCODE()
 
     def connect_2fa(self, sms_code):
         return self.connect(sms_code=sms_code)
 
     def check_connect(self):
-        if not self.api:
-            return False
-
+        # True/False
+        # if not connected, sometimes it's None, sometimes its '0', so
+        # both will fall on this first case
         if not global_value.check_websocket_if_connect:
-            self.connect()
             return False
-
-        return True
+        else:
+            return True
+        # wait for timestamp getting
 
     # _________________________UPDATE ACTIVES OPCODE_____________________
     def get_all_ACTIVES_OPCODE(self):
         return OP_code.ACTIVES
 
     def update_ACTIVES_OPCODE(self):
-        """
-        Atualiza o dicionário OP_code.ACTIVES com dados obtidos de get_all_init_v2
-        e gera o arquivo constants.py, ordenando os ativos pelo id.
-        """
-        try:
-            # Obtém todos os dados iniciais da API
-            dados = self.get_all_init_v2()
-    
-            if not dados:
-                raise Exception("Falha ao carregar os dados da API usando get_all_init_v2.")
-    
-            # Dicionário temporário para organizar os ativos
-            ativos_atualizados = {}
-    
-            # Categorias a serem processadas
-            categorias = ['turbo', 'digital', 'binary', 'cfd', 'forex', 'crypto', 'blitz']
-    
-            # Extraindo dados de cada categoria
-            for categoria in categorias:
-                if categoria in dados:
-                    for ativo_id, ativo_data in dados[categoria]['actives'].items():
-                        nome = ativo_data.get('name', '').replace('front.', '').strip()
-                        if nome and ativo_id not in ativos_atualizados:
-                            ativos_atualizados[ativo_id] = nome
-    
-            # Ordenando os ativos pelo id numérico
-            ativos_ordenados = sorted(ativos_atualizados.items(), key=lambda x: int(x[0]))
-    
-            # Gerando o conteúdo do arquivo
-            conteudo = [
-                "'''",
-                "Módulo para constantes da API da IQ Option.",
-                "Atualizado por @stealthlord_anonymous",
-                "'''",
-                "ACTIVES = {"
-            ]
-    
-            # Adicionando ativos ordenados ao conteúdo do arquivo
-            for i, (ativo_id, nome) in enumerate(ativos_ordenados):
-                separador = ',' if i < len(ativos_ordenados) - 1 else ''
-                conteudo.append(f'    "{nome}": {ativo_id}{separador}')
-            conteudo.append("}")
-    
-            # Caminho para o arquivo constants.py
-            caminho_arquivo = self.constants_path
-    
-            # Escrevendo o arquivo constants.py
-            with open(caminho_arquivo, "w", encoding="utf-8") as arquivo:
-                arquivo.write("\n".join(conteudo))
-    
-        except Exception as e:
-            logging.error(f"Erro ao atualizar ativos: {e}")
-            
+        # update from binary option
+        self.get_ALL_Binary_ACTIVES_OPCODE()
+        # crypto /dorex/cfd
+        self.instruments_input_all_in_ACTIVES()
+        dicc = {}
+        for lis in sorted(OP_code.ACTIVES.items(), key=operator.itemgetter(1)):
+            dicc[lis[0]] = lis[1]
+        OP_code.ACTIVES = dicc
+
     def get_name_by_activeId(self, activeId):
         info = self.get_financial_information(activeId)
         try:
@@ -277,44 +266,22 @@ class IQ_Option:
                 pass
 
     def get_all_init_v2(self):
-        # Verifica se a API está inicializada
-        if not self.api:
-            raise Exception("API não inicializada. Certifique-se de que a conexão foi configurada com sucesso.")
-    
-        # Reseta o resultado para evitar dados antigos
         self.api.api_option_init_all_result_v2 = None
-    
-        # Verifica a conexão e reconecta, se necessário
-        if not self.check_connect():
-            status, reason = self.connect()
-            if not status:
-                raise Exception(f"Falha ao reconectar: {reason}")
-    
-        # Chama a função da API para obter os dados iniciais
-        try:
-            self.api.get_api_option_init_all_v2()
-        except Exception as e:
-            raise Exception(f"Erro ao chamar get_api_option_init_all_v2: {e}")
-    
-        # Espera pela resposta da API com timeout
+
+        if self.check_connect() == False:
+            self.connect()
+
+        self.api.get_api_option_init_all_v2()
         start_t = time.time()
-        while self.api.api_option_init_all_result_v2 is None:
+        while self.api.api_option_init_all_result_v2 == None:
             if time.time() - start_t >= 30:
-                logging.error("**warning** get_all_init_v2 late 30 sec")
+                logging.error('**warning** get_all_init_v2 late 30 sec')
                 return None
-            logging.debug("Aguardando atualização de api_option_init_all_result_v2...")
-            time.sleep(0.2)
-    
-        # Retorna o resultado da API se disponível
-        if not self.api.api_option_init_all_result_v2:
-            raise Exception("Falha ao obter os dados da API. Resultado ainda é None após 30 segundos.")
-    
-        logging.info("get_all_init_v2 concluído com sucesso.")
-        return self.api.api_option_init_all_result_v2      
+        return self.api.api_option_init_all_result_v2
 
-            # return OP_code.ACTIVES
+        # return OP_code.ACTIVES
 
-        # ------- chek if binary/digit/cfd/stock... if open or not
+    # ------- chek if binary/digit/cfd/stock... if open or not
 
     def __get_binary_open(self):
         # for turbo and binary pairs
@@ -335,23 +302,17 @@ class IQ_Option:
                             self.OPEN_TIME[option][name]["open"] = active["enabled"]    
 
     def __get_digital_open(self):
-        try:
-            digital_data = self.get_digital_underlying_list_data()
-            if digital_data is None:
-                logging.error("Dados digitais não disponíveis")
-                return
-    
-            for digital in digital_data.get("underlying", []):
-                name = digital["underlying"]
-                schedule = digital["schedule"]
-                self.OPEN_TIME["digital"][name]["open"] = False
-                for schedule_time in schedule:
-                    start = schedule_time["open"]
-                    end = schedule_time["close"]
-                    if start < time.time() < end:
-                        self.OPEN_TIME["digital"][name]["open"] = True
-        except AttributeError:
-            logging.error("O método get_digital_underlying_list_data está ausente.")
+        # for digital options
+        digital_data = self.get_digital_underlying_list_data()["underlying"]
+        for digital in digital_data:
+            name = digital["underlying"]
+            schedule = digital["schedule"]
+            self.OPEN_TIME["digital"][name]["open"] = False
+            for schedule_time in schedule:
+                start = schedule_time["open"]
+                end = schedule_time["close"]
+                if start < time.time() < end:
+                    self.OPEN_TIME["digital"][name]["open"] = True
 
     def __get_other_open(self):
         # Crypto and etc pairs
@@ -907,141 +868,66 @@ class IQ_Option:
         return "ERROR duration"
 
     def buy_by_raw_expirations(self, price, active, direction, option, expired):
+
         self.api.buy_multi_option = {}
         self.api.buy_successful = None
         req_id = "buyraw"
-    
         try:
-            self.api.buy_multi_option[req_id] = {"id": None}  # Inicializa
-        except Exception as e:
-            logging.error(f"Erro ao inicializar requisição: {e}")
-    
-        # Envia requisição de compra
-        try:
-            self.api.buyv3_by_raw_expired(
-                price, OP_code.ACTIVES[active], direction, option, expired, request_id=req_id
-            )
-        except Exception as e:
-            logging.error(f"Erro ao enviar compra: {e}")
-            return False, f"Falha na compra: {e}"
-    
-        # Monitora resposta da API
+            self.api.buy_multi_option[req_id]["id"] = None
+        except:
+            pass
+        self.api.buyv3_by_raw_expired(
+            price, OP_code.ACTIVES[active], direction, option, expired, request_id=req_id)
         start_t = time.time()
-        timeout = 10  # Tempo limite de espera
         id = None
         self.api.result = None
-    
-        while self.api.result is None or id is None:
+        while self.api.result == None or id == None:
             try:
-                # Verifica mensagens de erro
-                if "message" in self.api.buy_multi_option[req_id]:
-                    error_message = self.api.buy_multi_option[req_id]["message"]
-                    logging.error(f"**warning** buy {error_message}")
-                    return False, error_message
-    
-                # Verifica ID
-                id = self.api.buy_multi_option[req_id].get("id")
-            except KeyError as e:
-                logging.debug(f"Chave ausente: {e}")
-    
-            # Checa timeout
-            if time.time() - start_t >= timeout:
-                logging.error(f"**warning** buy late {timeout} sec")
+                if "message" in self.api.buy_multi_option[req_id].keys():
+                    logging.error(
+                        '**warning** buy' + str(self.api.buy_multi_option[req_id]["message"]))
+                    return False, self.api.buy_multi_option[req_id]["message"]
+            except:
+                pass
+            try:
+                id = self.api.buy_multi_option[req_id]["id"]
+            except:
+                pass
+            if time.time() - start_t >= 5:
+                logging.error('**warning** buy late 5 sec')
                 return False, None
-    
-            time.sleep(0.5)  # Reduz a carga do loop
-    
-        return self.api.result, id
-    
+
+        return self.api.result, self.api.buy_multi_option[req_id]["id"]
+
     def buy(self, price, ACTIVES, ACTION, expirations):
-        """
-        Método para realizar compras. Inclui tratamento de timeout e reconexão automática.
-        """
         self.api.buy_multi_option = {}
         self.api.buy_successful = None
-        req_id = str(randint(0, 10000))  # ID único para a compra
-        timeout = 30  # Tempo limite ajustado para cada tentativa
-        retry_count = 3  # Número de tentativas permitidas
-        
-        # Inicializa o registro da compra
+        # req_id = "buy"
+        req_id = str(randint(0, 10000))
         try:
-            self.api.buy_multi_option[req_id] = {"id": None}
-        except Exception as e:
-            logging.error(f"Erro ao inicializar requisição: {e}")
-            return False, f"Erro: {e}"
-        
-        # Verifica a conexão antes de continuar
-        if not self.check_connect():
-            logging.error("Conexão com a API perdida. Tentando reconectar...")
-            status, reason = self.connect()
-            if not status:
-                logging.error(f"Reconexão falhou: {reason}")
-                return False, "Erro de conexão"
-    
-        for attempt in range(retry_count):
-            try:
-                # Enviar solicitação de compra
-                self.api.buyv3(
-                    float(price),
-                    OP_code.ACTIVES[ACTIVES],
-                    str(ACTION),
-                    int(expirations),
-                    req_id
-                )
-                logging.info(f"Compra enviada: {ACTIVES}, req_id={req_id}, tentativa {attempt + 1}")
-            except Exception as e:
-                logging.error(f"Erro ao enviar compra na tentativa {attempt + 1}: {e}")
-                return False, f"Erro: {e}"
-            
-            # Aguarda a resposta da API
-            start_t = time.time()
-            id = None
-            self.api.result = None
-            
-            while self.api.result is None or id is None:
-                if time.time() - start_t >= timeout:
-                    logging.warning(f"**warning** buy late {timeout} sec (tentativa {attempt + 1})")
-                    break
-    
-                try:
-                    # Verifica se há mensagem de erro da API
-                    if "message" in self.api.buy_multi_option[req_id]:
-                        error_message = self.api.buy_multi_option[req_id]["message"]
-                        logging.error(f"Erro na compra: {error_message}")
-                        return False, error_message
-                    
-                    # Obtém o ID de compra
-                    id = self.api.buy_multi_option[req_id].get("id")
-                except KeyError:
-                    logging.warning("ID ainda não disponível...")
-                time.sleep(0.5)
-    
-            if id is not None:
-                # Recupera o resultado da operação
-                result = self.get_result(req_id)
-                if result:
-                    logging.info(f"Compra realizada com sucesso. Resultado: {result}")
-                    return result, id
-                logging.error("Falha ao recuperar o resultado da operação.")
-            
-            logging.warning(f"Tentativa {attempt + 1} falhou. Retentando...")
-            time.sleep(2)
-    
-        logging.error("Todas as tentativas de compra falharam.")
-        return False, None
-    
-    def get_result(self, req_id):
-        """
-        Recupera o resultado de uma operação com base no req_id.
-        """
+            self.api.buy_multi_option[req_id]["id"] = None
+        except:
+            pass
+        self.api.buyv3(
+            float(price), OP_code.ACTIVES[ACTIVES], str(ACTION), int(expirations), req_id)
         start_t = time.time()
-        while time.time() - start_t < 30:  # Timeout de 30 segundos
-            if req_id in self.api.buy_multi_option:
-                logging.info(f"Resultado obtido para o ID {req_id}: {self.api.buy_multi_option[req_id]}")
-                return self.api.buy_multi_option[req_id]
-            time.sleep(0.5)
-        logging.error(f"Resultado para {req_id} não recebido dentro do tempo limite.")
-        return None
+        id = None
+        self.api.result = None
+        while self.api.result == None or id == None:
+            try:
+                if "message" in self.api.buy_multi_option[req_id].keys():
+                    return False, self.api.buy_multi_option[req_id]["message"]
+            except:
+                pass
+            try:
+                id = self.api.buy_multi_option[req_id]["id"]
+            except:
+                pass
+            if time.time() - start_t >= 5:
+                logging.error('**warning** buy late 5 sec')
+                return False, None
+
+        return self.api.result, self.api.buy_multi_option[req_id]["id"]
 
     def sell_option(self, options_ids):
         self.api.sell_option(options_ids)
@@ -1062,14 +948,12 @@ class IQ_Option:
         self.api.underlying_list_data = None
         self.api.get_digital_underlying()
         start_t = time.time()
-    
-        # Aguarda a resposta da API com timeout
-        while self.api.underlying_list_data is None:
+        while self.api.underlying_list_data == None:
             if time.time() - start_t >= 30:
-                logging.error("Timeout ao obter digital_underlying_list_data")
+                logging.error(
+                    '**warning** get_digital_underlying_list_data late 30 sec')
                 return None
-            time.sleep(0.5)
-    
+
         return self.api.underlying_list_data
 
     def get_strike_list(self, ACTIVES, duration):
