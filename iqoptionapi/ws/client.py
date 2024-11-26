@@ -61,20 +61,25 @@ from iqoptionapi.ws.received.leaderboard_userinfo_deals_client import leaderboar
 from iqoptionapi.ws.received.client_price_generated import client_price_generated
 from iqoptionapi.ws.received.users_availability import users_availability
 
-
-class WebsocketClient(object):
-    """Class for work with IQ option websocket."""
+class WebsocketClient:
+    """Class for working with the IQ option websocket."""
 
     def __init__(self, api):
-        """
-        :param api: The instance of :class:`IQOptionAPI
-            <iqoptionapi.api.IQOptionAPI>`.
-        """
         self.api = api
         self.wss = websocket.WebSocketApp(
-            self.api.wss_url, on_message=self.on_message,
-            on_error=self.on_error, on_close=self.on_close,
-            on_open=self.on_open)
+            self.api.wss_url,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
+            on_open=self.on_open
+        )
+        self.thread = Thread(target=self.run_forever)
+        self.thread.daemon = True
+        self.thread.start()
+
+    def run_forever(self):
+        """Runs the websocket in a separate thread."""
+        self.wss.run_forever()
 
     def dict_queue_add(self, dict, maxdict, key1, key2, key3, value):
         if key3 in dict[key1][key2]:
@@ -89,9 +94,7 @@ class WebsocketClient(object):
                     dict[key1][key2][key3] = value
                     break
                 else:
-                    # del mini key
-                    del dict[key1][key2][sorted(
-                        dict[key1][key2].keys(), reverse=False)[0]]
+                    del dict[key1][key2][sorted(dict[key1][key2].keys())[0]]
 
     def api_dict_clean(self, obj):
         if len(obj) > 5000:
@@ -99,15 +102,15 @@ class WebsocketClient(object):
                 del obj[k]
                 break
 
-    def on_message(self, message):  # pylint: disable=unused-argument
-        """Method to process websocket messages."""
+    def on_message(self, _, message):
+        """Processes incoming websocket messages."""
         global_value.ssl_Mutual_exclusion = True
         logger = logging.getLogger(__name__)
         logger.debug(message)
+        
+        message = json.loads(message)
 
-        message = json.loads(str(message))
-
-
+        # Call message handler functions
         technical_indicators(self.api, message, self.api_dict_clean)
         time_sync(self.api, message)
         heartbeat(self.api, message)
@@ -135,12 +138,10 @@ class WebsocketClient(object):
         strike_list(self.api, message)
         api_game_betinfo_result(self.api, message)
         traders_mood_changed(self.api, message)
-         # ------for forex&cfd&crypto..
         order_placed_temp(self.api, message)
         order(self.api, message)
         position(self.api, message)
         positions(self.api, message)
-        order_placed_temp(self.api, message)
         deferred_orders(self.api, message)
         history_positions(self.api, message)
         available_leverages(self.api, message)
@@ -168,23 +169,23 @@ class WebsocketClient(object):
         global_value.ssl_Mutual_exclusion = False
 
     @staticmethod
-    def on_error(wss, error):  # pylint: disable=unused-argument
-        """Method to process websocket errors."""
+    def on_error(_, error):
+        """Handles websocket errors."""
         logger = logging.getLogger(__name__)
         logger.error(error)
         global_value.websocket_error_reason = str(error)
         global_value.check_websocket_if_error = True
 
     @staticmethod
-    def on_open(wss):  # pylint: disable=unused-argument
-        """Method to process websocket open."""
+    def on_open(_):
+        """Handles websocket connection open."""
         logger = logging.getLogger(__name__)
         logger.debug("Websocket client connected.")
         global_value.check_websocket_if_connect = 1
 
     @staticmethod
-    def on_close(wss):  # pylint: disable=unused-argument
-        """Method to process websocket close."""
+    def on_close(_):
+        """Handles websocket connection close."""
         logger = logging.getLogger(__name__)
         logger.debug("Websocket connection closed.")
         global_value.check_websocket_if_connect = 0
