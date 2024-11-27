@@ -2,10 +2,6 @@
 import time
 from datetime import datetime, timedelta
 
-# https://docs.python.org/3/library/datetime.html
-# If optional argument tz is None or not specified, the timestamp is converted to the platform's local date and time, and the returned datetime object is naive.
-# time.mktime(dt.timetuple())
-
 
 def date_to_timestamp(dt):
     # local timezone to timestamp support python2 pytohn3
