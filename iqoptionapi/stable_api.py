@@ -1,4 +1,3 @@
-
 from iqoptionapi.api import API
 import iqoptionapi.constants as OP_code
 import iqoptionapi.country_id as Country
@@ -1077,6 +1076,115 @@ class IQ_Option:
         return self.api.alertas_tocados
 
 ########### FUNÇÕES QUE CAPTURA PARES E PAYOUTS ###########
+    def get_all_open_time(self):
+        """
+        Retorna informações de tempo aberto para todos os pares disponíveis (binárias, digitais e outros),
+        utilizando a estrutura e chamadas da nova API.
+        """
+        # Inicializa o armazenamento de pares abertos
+        self.OPEN_TIME = nested_dict(3, dict)
+    
+        # Threads para diferentes tipos de mercado
+        binary = threading.Thread(target=self.__get_binary_open)
+        digital = threading.Thread(target=self.__get_digital_open)
+        other = threading.Thread(target=self.__get_other_open)
+    
+        # Inicia as threads
+        binary.start()
+        digital.start()
+        other.start()
+    
+        # Aguarda as threads concluírem
+        binary.join()
+        digital.join()
+        other.join()
+    
+        return self.OPEN_TIME
+    
+    # Novas implementações para as funções específicas
+    def __get_binary_open(self):
+        """
+        Atualiza os pares binários disponíveis na estrutura OPEN_TIME.
+        """
+        self.api.payout_binarias = None
+        request = {"name": "get-initialization-data", "version": "4.0", "body": {}}
+        self.api.send_websocket_request(name="sendMessage", msg=request)
+    
+        # Aguarda a resposta
+        start = time.time()
+        while self.api.payout_binarias is None:
+            time.sleep(0.1)
+            if time.time() - start > 10:  # Timeout após 10 segundos
+                return
+    
+        # Processa os dados recebidos
+        binary_data = self.api.payout_binarias
+        if binary_data:
+            for option_type in ["binary", "turbo"]:
+                if option_type in binary_data:
+                    for active_id, active_data in binary_data[option_type]["actives"].items():
+                        if active_data["enabled"]:
+                            name = str(active_data["name"]).split(".")[1]
+                            self.OPEN_TIME[option_type][name] = {
+                                "open": not active_data["is_suspended"],
+                                "payout": 100 - int(active_data["option"]["profit"]["commission"]),
+                            }
+    
+    def __get_digital_open(self):
+        """
+        Atualiza os pares digitais disponíveis na estrutura OPEN_TIME.
+        """
+        self.api.underliyng_list = None
+        request = {
+            "name": "digital-option-instruments.get-underlying-list",
+            "version": "2.0",
+            "body": {"filter_suspended": True},
+        }
+        self.api.send_websocket_request(name="sendMessage", msg=request)
+    
+        # Aguarda a resposta
+        start = time.time()
+        while self.api.underliyng_list is None:
+            time.sleep(0.1)
+            if time.time() - start > 10:  # Timeout após 10 segundos
+                return
+    
+        # Processa os dados recebidos
+        digital_data = self.api.underliyng_list.get("underlying", [])
+        for digital in digital_data:
+            name = digital["underlying"]
+            is_open = any(
+                schedule["open"] < time.time() < schedule["close"]
+                for schedule in digital.get("schedule", [])
+            )
+            self.OPEN_TIME["digital"][name] = {"open": is_open}
+    
+    def __get_other_open(self):
+        """
+        Atualiza outros pares disponíveis na estrutura OPEN_TIME.
+        """
+        # Exemplo genérico para futuros mercados ou categorias específicas.
+        self.api.other_markets = None
+        request = {
+            "name": "get-other-markets",
+            "version": "1.0",
+            "body": {},  # Adicione parâmetros relevantes
+        }
+        self.api.send_websocket_request(name="sendMessage", msg=request)
+    
+        # Aguarda a resposta
+        start = time.time()
+        while self.api.other_markets is None:
+            time.sleep(0.1)
+            if time.time() - start > 10:  # Timeout após 10 segundos
+                return
+    
+        # Processa os dados recebidos
+        other_data = self.api.other_markets.get("markets", [])
+        for market in other_data:
+            name = market["name"]
+            self.OPEN_TIME["other"][name] = {"open": market.get("is_open", False)}
+
     def captura_binarias(self):
         self.api.payout_binarias = None
         binarias = {"name": "get-initialization-data", "version": "4.0", "body": {}}
