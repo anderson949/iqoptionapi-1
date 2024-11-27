@@ -63,74 +63,88 @@ from iqoptionapi.ws.received.client_price_generated import client_price_generate
 from iqoptionapi.ws.received.users_availability import users_availability
 
 
-class WebsocketClient(object):
-    """Class for work with IQ option websocket."""
+# client.py
+"""Module for IQ option websocket."""
+
+import json
+import logging
+import websocket
+import iqoptionapi.constants as OP_code
+import iqoptionapi.global_value as global_value
+from threading import Thread
+import time
+
+
+class WebsocketClient:
+    """Class for working with IQ Option WebSocket."""
 
     def __init__(self, api):
         """
-        :param api: The instance of :class:`IQOptionAPI
-            <iqoptionapi.api.IQOptionAPI>`.
+        :param api: The instance of :class:`IQOptionAPI <iqoptionapi.api.IQOptionAPI>`.
         """
         self.api = api
+        self.logger = logging.getLogger(__name__)
+        self.wss = None
+        self.should_run = True  # Flag to control the WebSocket thread
+
+    def connect(self):
+        """Establish a WebSocket connection."""
+        self.logger.info("Initializing WebSocket connection.")
         self.wss = websocket.WebSocketApp(
             self.api.wss_url,
             on_message=self.on_message,
             on_error=self.on_error,
             on_close=self.on_close,
-            on_open=self.on_open
+            on_open=self.on_open,
         )
 
-    def dict_queue_add(self, dict, maxdict, key1, key2, key3, value):
-        if key3 in dict[key1][key2]:
-            dict[key1][key2][key3] = value
-        else:
-            while True:
-                try:
-                    dic_size = len(dict[key1][key2])
-                except KeyError:
-                    dic_size = 0
-                if dic_size < maxdict:
-                    dict[key1][key2][key3] = value
-                    break
-                else:
-                    del dict[key1][key2][sorted(dict[key1][key2].keys())[0]]
+        # Run WebSocket in a separate thread
+        thread = Thread(target=self._run_forever, daemon=True)
+        thread.start()
 
-    def api_dict_clean(self, obj):
-        if len(obj) > 5000:
-            for k in obj.keys():
-                del obj[k]
-                break
+    def _run_forever(self):
+        """Run the WebSocket connection in a loop."""
+        while self.should_run:
+            try:
+                self.wss.run_forever(ping_interval=30, ping_timeout=10)
+            except Exception as e:
+                self.logger.error(f"WebSocket connection failed: {e}")
+                time.sleep(5)  # Wait before attempting to reconnect
+            else:
+                self.logger.info("WebSocket disconnected. Attempting to reconnect...")
+                time.sleep(5)  # Reconnection delay
+
+    def stop(self):
+        """Stop the WebSocket connection."""
+        self.should_run = False
+        if self.wss:
+            self.wss.close()
 
     def on_message(self, wss, message):
-        """Method to process websocket messages."""
+        """Process WebSocket messages."""
         global_value.ssl_Mutual_exclusion = True
-        logger = logging.getLogger(__name__)
-        logger.debug(message)
+        self.logger.debug(f"Received message: {message}")
+        try:
+            message = json.loads(message)
+            # Call all necessary handlers here
+            # Example: technical_indicators(self.api, message)
+        except Exception as e:
+            self.logger.error(f"Error processing message: {e}")
+        finally:
+            global_value.ssl_Mutual_exclusion = False
 
-        message = json.loads(message)
-        technical_indicators(self.api, message, self.api_dict_clean)
-        # Add any other message handlers here
-
-        global_value.ssl_Mutual_exclusion = False
-
-    @staticmethod
-    def on_error(wss, error):
-        """Handle errors."""
-        logger = logging.getLogger(__name__)
-        logger.error(f"WebSocket error: {error}")
+    def on_error(self, wss, error):
+        """Handle WebSocket errors."""
+        self.logger.error(f"WebSocket error: {error}")
         global_value.websocket_error_reason = str(error)
         global_value.check_websocket_if_error = True
 
-    @staticmethod
-    def on_open(wss):
-        """Handle connection open."""
-        logger = logging.getLogger(__name__)
-        logger.info("WebSocket connection opened.")
-        global_value.check_websocket_if_connect = 1
-
-    @staticmethod
-    def on_close(wss, close_status_code, close_msg):
-        """Handle connection close."""
-        logger = logging.getLogger(__name__)
-        logger.info(f"WebSocket closed with code: {close_status_code}, message: {close_msg}")
+    def on_close(self, wss, close_status_code, close_msg):
+        """Handle WebSocket close events."""
+        self.logger.info(f"WebSocket closed. Code: {close_status_code}, Message: {close_msg}")
         global_value.check_websocket_if_connect = 0
+
+    def on_open(self, wss):
+        """Handle WebSocket open events."""
+        self.logger.info("WebSocket connection established.")
+        global_value.check_websocket_if_connect = 1
