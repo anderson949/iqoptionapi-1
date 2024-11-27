@@ -5,7 +5,7 @@ import logging
 import websocket
 import iqoptionapi.constants as OP_code
 import iqoptionapi.global_value as global_value
-from threading import Thread, Lock
+from threading import Thread
 from iqoptionapi.ws.received.technical_indicators import technical_indicators
 from iqoptionapi.ws.received.time_sync import time_sync
 from iqoptionapi.ws.received.heartbeat import heartbeat
@@ -61,42 +61,20 @@ from iqoptionapi.ws.received.leaderboard_userinfo_deals_client import leaderboar
 from iqoptionapi.ws.received.client_price_generated import client_price_generated
 from iqoptionapi.ws.received.users_availability import users_availability
 
-class WebsocketClient:
-    """Class for working with the IQ option websocket."""
 
-    lock = Lock()
+class WebsocketClient(object):
+    """Class for work with IQ option websocket."""
 
     def __init__(self, api):
+        """
+        :param api: The instance of :class:`IQOptionAPI
+            <iqoptionapi.api.IQOptionAPI>`.
+        """
         self.api = api
         self.wss = websocket.WebSocketApp(
-            self.api.wss_url,
-            on_message=self.on_message,
-            on_error=self.on_error,
-            on_close=self.on_close,
-            on_open=self.on_open
-        )
-        self.thread = Thread(target=self.run_forever)
-        self.thread.daemon = True
-        self.thread.start()
-
-    def run_forever(self):
-        """Runs the websocket in a separate thread."""
-        with self.lock:
-            if global_value.check_websocket_if_connect:
-                logging.warning("O WebSocket já está conectado. Não será reiniciado.")
-                return
-            try:
-                self.wss.run_forever(ping_interval=30, ping_timeout=10)
-            except Exception as e:
-                logging.error(f"Erro no WebSocket: {e}")
-                self.close()
-
-    def close(self):
-        """Closes the websocket connection."""
-        with self.lock:
-            if self.wss.sock and self.wss.sock.connected:
-                self.wss.close()
-                logging.info("Conexão WebSocket fechada.")
+            self.api.wss_url, on_message=self.on_message,
+            on_error=self.on_error, on_close=self.on_close,
+            on_open=self.on_open)
 
     def dict_queue_add(self, dict, maxdict, key1, key2, key3, value):
         if key3 in dict[key1][key2]:
@@ -111,7 +89,9 @@ class WebsocketClient:
                     dict[key1][key2][key3] = value
                     break
                 else:
-                    del dict[key1][key2][sorted(dict[key1][key2].keys())[0]]
+                    # del mini key
+                    del dict[key1][key2][sorted(
+                        dict[key1][key2].keys(), reverse=False)[0]]
 
     def api_dict_clean(self, obj):
         if len(obj) > 5000:
@@ -119,15 +99,15 @@ class WebsocketClient:
                 del obj[k]
                 break
 
-    def on_message(self, _, message):
-        """Processes incoming websocket messages."""
+    def on_message(self, message):  # pylint: disable=unused-argument
+        """Method to process websocket messages."""
         global_value.ssl_Mutual_exclusion = True
         logger = logging.getLogger(__name__)
         logger.debug(message)
-        
-        message = json.loads(message)
 
-        # Call message handler functions
+        message = json.loads(str(message))
+
+
         technical_indicators(self.api, message, self.api_dict_clean)
         time_sync(self.api, message)
         heartbeat(self.api, message)
@@ -155,10 +135,12 @@ class WebsocketClient:
         strike_list(self.api, message)
         api_game_betinfo_result(self.api, message)
         traders_mood_changed(self.api, message)
+         # ------for forex&cfd&crypto..
         order_placed_temp(self.api, message)
         order(self.api, message)
         position(self.api, message)
         positions(self.api, message)
+        order_placed_temp(self.api, message)
         deferred_orders(self.api, message)
         history_positions(self.api, message)
         available_leverages(self.api, message)
@@ -186,23 +168,23 @@ class WebsocketClient:
         global_value.ssl_Mutual_exclusion = False
 
     @staticmethod
-    def on_error(_, error):
-        """Handles websocket errors."""
+    def on_error(wss, error):  # pylint: disable=unused-argument
+        """Method to process websocket errors."""
         logger = logging.getLogger(__name__)
-        logger.error(f"Erro no WebSocket: {error}")
+        logger.error(error)
         global_value.websocket_error_reason = str(error)
         global_value.check_websocket_if_error = True
 
     @staticmethod
-    def on_open(_):
-        """Handles websocket connection open."""
+    def on_open(wss):  # pylint: disable=unused-argument
+        """Method to process websocket open."""
         logger = logging.getLogger(__name__)
-        logger.debug("WebSocket conectado.")
-        global_value.check_websocket_if_connect = 1  # Indica conexão aberta
+        logger.debug("Websocket client connected.")
+        global_value.check_websocket_if_connect = 1
 
     @staticmethod
-    def on_close(_):
-        """Handles websocket connection close."""
+    def on_close(wss):  # pylint: disable=unused-argument
+        """Method to process websocket close."""
         logger = logging.getLogger(__name__)
-        logger.debug("WebSocket desconectado.")
-        global_value.check_websocket_if_connect = 0  # Indica conexão fechada
+        logger.debug("Websocket connection closed.")
+        global_value.check_websocket_if_connect = 0
