@@ -63,59 +63,63 @@ from iqoptionapi.ws.received.users_availability import users_availability
 
 
 class WebsocketClient:
-    """Class for working with the IQ option websocket."""
+    """Classe para lidar com a comunicação via WebSocket do IQ Option."""
 
     def __init__(self, api):
         self.api = api
         self.wss = None
         self.thread = None
-        self.is_running = False  # Flag to track WebSocket state.
+        self.is_running = False  # Flag para controlar o estado do WebSocket.
 
     def start(self):
-        """Starts the WebSocket connection if not already running."""
+        """Inicia a conexão WebSocket se não estiver em execução."""
         if not self.is_running:
-            self.wss = websocket.WebSocketApp(
-                self.api.wss_url,
-                on_message=self.on_message,
-                on_error=self.on_error,
-                on_close=self.on_close,
-                on_open=self.on_open
-            )
-            self.thread = Thread(target=self.run_forever)
-            self.thread.daemon = True
-            self.thread.start()
-            self.is_running = True
+            if self.api and self.api.wss_url:  # Certifica-se de que o API e o URL estão configurados
+                self.wss = websocket.WebSocketApp(
+                    self.api.wss_url,
+                    on_message=self.on_message,
+                    on_error=self.on_error,
+                    on_close=self.on_close,
+                    on_open=self.on_open
+                )
+                self.thread = Thread(target=self.run_forever)
+                self.thread.daemon = True
+                self.thread.start()
+                self.is_running = True
+            else:
+                logger = logging.getLogger(__name__)
+                logger.error("API ou URL do WebSocket não estão configurados corretamente.")
         else:
             logger = logging.getLogger(__name__)
-            logger.warning("WebSocket is already running. Skipping start.")
+            logger.warning("WebSocket já está em execução. Ignorando nova inicialização.")
 
     def stop(self):
-        """Stops the WebSocket connection if running."""
+        """Para a conexão WebSocket se estiver em execução."""
         if self.is_running:
             self.wss.close()
             self.thread.join()
             self.is_running = False
         else:
             logger = logging.getLogger(__name__)
-            logger.warning("WebSocket is not running. Skipping stop.")
+            logger.warning("WebSocket não está em execução. Ignorando o fechamento.")
 
     def restart(self):
-        """Restarts the WebSocket connection."""
+        """Reinicia a conexão WebSocket."""
         self.stop()
         self.start()
 
     def run_forever(self):
-        """Runs the websocket in a separate thread."""
+        """Executa o WebSocket em uma thread separada."""
         try:
             self.wss.run_forever()
         except websocket.WebSocketException as e:
             logger = logging.getLogger(__name__)
-            logger.error(f"WebSocket encountered an error: {e}")
+            logger.error(f"Erro no WebSocket: {e}")
         finally:
             self.is_running = False
 
     def dict_queue_add(self, dict, maxdict, key1, key2, key3, value):
-        """Adds a value to a nested dictionary with a max size."""
+        """Adiciona um valor a um dicionário aninhado com limite de tamanho."""
         if key3 in dict[key1][key2]:
             dict[key1][key2][key3] = value
         else:
@@ -131,50 +135,50 @@ class WebsocketClient:
                     del dict[key1][key2][sorted(dict[key1][key2].keys())[0]]
 
     def api_dict_clean(self, obj):
-        """Cleans up the dictionary if it exceeds the maximum size."""
+        """Limpa o dicionário se ele exceder o tamanho máximo."""
         if len(obj) > 5000:
             for k in obj.keys():
                 del obj[k]
                 break
 
     def on_message(self, _, message):
-        """Processes incoming websocket messages."""
+        """Processa as mensagens recebidas do WebSocket."""
         global_value.ssl_Mutual_exclusion = True
         logger = logging.getLogger(__name__)
         logger.debug(message)
         
         message = json.loads(message)
 
-        # Process message using handlers
+        # Processa as mensagens usando os manipuladores
         technical_indicators(self.api, message, self.api_dict_clean)
         time_sync(self.api, message)
         heartbeat(self.api, message)
         balances(self.api, message)
         profile(self.api, message)
-        # Continue with all other handlers...
+        # Continue com todos os outros manipuladores...
         
         global_value.ssl_Mutual_exclusion = False
 
     @staticmethod
     def on_error(_, error):
-        """Handles websocket errors."""
+        """Lida com erros do WebSocket."""
         logger = logging.getLogger(__name__)
-        logger.error(f"WebSocket error: {error}")
+        logger.error(f"Erro no WebSocket: {error}")
         global_value.websocket_error_reason = str(error)
         global_value.check_websocket_if_error = True
 
     @staticmethod
     def on_open(_):
-        """Handles websocket connection open."""
+        """Lida com a abertura da conexão WebSocket."""
         logger = logging.getLogger(__name__)
-        logger.info("WebSocket connection opened.")
+        logger.info("Conexão WebSocket aberta.")
         global_value.check_websocket_if_connect = 1
 
     @staticmethod
     def on_close(_, close_status_code, close_msg):
-        """Handles websocket connection close."""
+        """Lida com o fechamento da conexão WebSocket."""
         logger = logging.getLogger(__name__)
         logger.warning(
-            f"WebSocket connection closed. Status: {close_status_code}, Message: {close_msg}"
+            f"Conexão WebSocket fechada. Status: {close_status_code}, Mensagem: {close_msg}"
         )
         global_value.check_websocket_if_connect = 0
