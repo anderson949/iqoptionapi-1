@@ -108,9 +108,8 @@ class WebsocketClient(object):
         logger.debug(message)
 
         message = json.loads(message)
-        # Process received messages
         technical_indicators(self.api, message, self.api_dict_clean)
-        # Additional processing calls ...
+        # Add any other message handlers here
 
         global_value.ssl_Mutual_exclusion = False
 
@@ -118,7 +117,7 @@ class WebsocketClient(object):
     def on_error(wss, error):
         """Handle errors."""
         logger = logging.getLogger(__name__)
-        logger.error(error)
+        logger.error(f"WebSocket error: {error}")
         global_value.websocket_error_reason = str(error)
         global_value.check_websocket_if_error = True
 
@@ -126,12 +125,12 @@ class WebsocketClient(object):
     def on_open(wss):
         """Handle connection open."""
         logger = logging.getLogger(__name__)
-        logger.debug("WebSocket client connected.")
+        logger.info("WebSocket connection opened.")
         global_value.check_websocket_if_connect = 1
 
     @staticmethod
     def on_close(wss, close_status_code, close_msg):
         """Handle connection close."""
         logger = logging.getLogger(__name__)
-        logger.debug(f"Connection closed: {close_status_code}, {close_msg}")
+        logger.info(f"WebSocket closed with code: {close_status_code}, message: {close_msg}")
         global_value.check_websocket_if_connect = 0
