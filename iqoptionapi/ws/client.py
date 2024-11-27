@@ -61,7 +61,6 @@ from iqoptionapi.ws.received.leaderboard_userinfo_deals_client import leaderboar
 from iqoptionapi.ws.received.client_price_generated import client_price_generated
 from iqoptionapi.ws.received.users_availability import users_availability
 
-
 class WebsocketClient:
     """Classe para lidar com a comunicação via WebSocket do IQ Option."""
 
@@ -77,8 +76,11 @@ class WebsocketClient:
 
     def start(self):
         """Inicia a conexão WebSocket se não estiver em execução."""
+        logger = logging.getLogger(__name__)
+
         if not self.is_running:
-            if self.api and self.api.wss_url:  # Verifique se a API e URL estão configurados
+            if self.api and hasattr(self.api, 'wss_url') and self.api.wss_url:  # Verifique se a URL do WebSocket está presente
+                # Cria a instância do WebSocket
                 self.wss = websocket.WebSocketApp(
                     self.api.wss_url,
                     on_message=self.on_message,
@@ -86,17 +88,15 @@ class WebsocketClient:
                     on_close=self.on_close,
                     on_open=self.on_open
                 )
+                logger.info(f"WebSocket URL: {self.api.wss_url}")  # Log para verificar a URL
                 self.thread = Thread(target=self.run_forever)
                 self.thread.daemon = True
                 self.thread.start()
                 self.is_running = True
-                logger = logging.getLogger(__name__)
                 logger.info("WebSocket iniciado com sucesso.")
             else:
-                logger = logging.getLogger(__name__)
                 logger.error("API ou URL do WebSocket não estão configurados corretamente.")
         else:
-            logger = logging.getLogger(__name__)
             logger.warning("WebSocket já está em execução. Ignorando nova inicialização.")
 
     def stop(self):
