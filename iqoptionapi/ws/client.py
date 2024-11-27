@@ -67,14 +67,18 @@ class WebsocketClient:
 
     def __init__(self, api):
         self.api = api
-        self.wss = None
+        self.wss = None  # Inicializa o atributo como None
         self.thread = None
-        self.is_running = False  # Flag para controlar o estado do WebSocket.
+        self.is_running = False  # Flag para controlar o estado do WebSocket
+
+        # Inicializa o global_value com valores padrão, se necessário
+        if not hasattr(global_value, 'check_websocket_if_connect'):
+            global_value.check_websocket_if_connect = 0
 
     def start(self):
         """Inicia a conexão WebSocket se não estiver em execução."""
         if not self.is_running:
-            if self.api and self.api.wss_url:  # Certifica-se de que o API e o URL estão configurados
+            if self.api and self.api.wss_url:  # Verifique se a API e URL estão configurados
                 self.wss = websocket.WebSocketApp(
                     self.api.wss_url,
                     on_message=self.on_message,
@@ -86,6 +90,8 @@ class WebsocketClient:
                 self.thread.daemon = True
                 self.thread.start()
                 self.is_running = True
+                logger = logging.getLogger(__name__)
+                logger.info("WebSocket iniciado com sucesso.")
             else:
                 logger = logging.getLogger(__name__)
                 logger.error("API ou URL do WebSocket não estão configurados corretamente.")
@@ -99,6 +105,8 @@ class WebsocketClient:
             self.wss.close()
             self.thread.join()
             self.is_running = False
+            logger = logging.getLogger(__name__)
+            logger.info("WebSocket fechado com sucesso.")
         else:
             logger = logging.getLogger(__name__)
             logger.warning("WebSocket não está em execução. Ignorando o fechamento.")
@@ -111,7 +119,11 @@ class WebsocketClient:
     def run_forever(self):
         """Executa o WebSocket em uma thread separada."""
         try:
-            self.wss.run_forever()
+            if self.wss:  # Verifique se self.wss não é None antes de chamar run_forever
+                self.wss.run_forever()
+            else:
+                logger = logging.getLogger(__name__)
+                logger.error("WebSocket não foi inicializado corretamente.")
         except websocket.WebSocketException as e:
             logger = logging.getLogger(__name__)
             logger.error(f"Erro no WebSocket: {e}")
